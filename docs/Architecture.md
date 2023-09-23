@@ -43,3 +43,21 @@ The Apiary system should be able to:
 ME :-)
 
 # 2 Constrains
+
+There are the following constraints:
+- There can be no Internet connection in the field
+- There can be no access to the remote server in the field
+
+# 3 Context and scope
+
+## 3.1 Business context
+
+The following figure shows the inputs and outputs of the Apiary system - the human users and the technical environment.
+
+![Business context](./img/Business_context.png)
+
+## 3.2 Technical context
+
+The technical concepts shows the channels between the units of Apiary system and the users who operate it.
+
+![Technical context](img/Technical_context.png)
