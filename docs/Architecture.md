@@ -89,3 +89,7 @@ The technical concepts shows the channels between the units of Apiary system and
 
 1. Any request for data or settings change shall processed in 100ms time interval.
 2. Any change of the field units settings shall be applied in 1h time interval.
+
+# 5 Building block view
+
+![Building block view](img/Building_blocks.png)
