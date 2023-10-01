@@ -92,4 +92,20 @@ The technical concepts shows the channels between the units of Apiary system and
 
 # 5 Building block view
 
+The following diagram shows the interaction between the system components.
+
 ![Building block view](img/Building_blocks.png)
+
+# 6 Runtime view
+
+## 6.1 The overal runtime view of the field devices
+
+![Field runtime view](img/Runtime_view.png)
+
+## 6.2 Workflow of the Slave field unit
+
+![Slave unit workflow](img/Slave_workflow.png)
+
+## 6.3 Workflow of the Master field unit
+
+![Master unit workflow](img/Master_workflow.png)
