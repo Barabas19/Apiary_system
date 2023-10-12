@@ -10,8 +10,6 @@ class SIM800
 {
     public:
 
-    // TODO: create check of incoming / missed call - may be used AT+CLCC
-
     enum ATCmdStatus
     {
         RESP_WAITING,
