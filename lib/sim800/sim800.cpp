@@ -1,6 +1,7 @@
 #include <sim800.h>
+#include <logger.h>
 
-SIM800::SIM800(HardwareSerial atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
+SIM800::SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
     atSerial{atSerial},
     txPin{txPin},
     rxPin{rxPin},
@@ -71,46 +72,51 @@ void SIM800::powerOff() {
     }
 }
 
+bool SIM800::messageAvailable() {
+    return atSerial.available();
+}
+
 char* SIM800::readMessage() {
     int received = 0;
-    for(int buffered = atSerial.available(); buffered > 0; buffered = atSerial.available()) {
+    char c;
+    if(!messageAvailable()) {
+        return nullptr;
+    }
+
+    while(true){
         // extend buffer size, if necessary
-        if(received + buffered >= readBufferSize - 1) {
-            int newSize = received + buffered + 1;
-            readBuffer = (char *)realloc(readBuffer, newSize);
+        if(received >= readBufferSize - 2) {
+            readBufferSize = min(readBufferSize + RX_DEFAULT_BUFFER_SIZE, RX_MAX_BUFFER_SIZE + 1);
+            readBuffer = (char *)realloc(readBuffer, readBufferSize);
         }
 
-        // read buffered bytes
-        int readBuffered = atSerial.readBytes(readBuffer + received, buffered);
-        if(readBuffered == 0) {
+        // read character
+        if(atSerial.readBytes(&c, 1) == 0) {
             break;
         }
+        
+        // exclude leading <cr><lf>
+        if(received == 0 && (c == '\r' || c == '\n')) {
+            continue;
+        }
 
-        received += readBuffered;
+        readBuffer[received] = c;
+        ++received;
 
-        // check, if <cr><ln> received at the end of message
-        if(received > 2 && readBuffer[received - 3] != '\r' && readBuffer[received - 3] != '\n'
-                        && readBuffer[received - 2] == '\r' && readBuffer[received - 1] == '\n') {
-            received -= 1;
+
+        // stop reading, when <cr><ln> received
+        if(received > 2 && readBuffer[received - 2] == '\r' && readBuffer[received - 1] == '\n') {
+            received -= 2;
+            // put trailing zero
+            readBuffer[received - 1] == '\0';
             break;
         }
     }
-
-    if(received > 0) {
-        // put trailing zero
-        readBuffer[received - 1] == '\0';
-        // exclude leading <cr><ln>
-        for(int i = 0; i < received; i++) {
-            if(readBuffer[i] != '\r' && readBuffer[i] != '\n') {
-                return &readBuffer[i];
-            }
-        }
-    }
-
-    return nullptr;
+    
+    return received > 0 ? readBuffer : nullptr;
 }
 
 void SIM800::writeMessage(const char *message) {
     atSerial.print(message);
-    // atSerial.write('\r');
+    atSerial.write('\r');
 }

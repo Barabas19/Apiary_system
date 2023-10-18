@@ -18,7 +18,7 @@ public:
      * @rstPin - pin number, which the RST pin of SIM800L is connected to
      * @dtrPin - pin number, which the DTR pin of SIM800L is connected to
      */
-    SIM800(HardwareSerial atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
+    SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
 
     ~SIM800();
 
@@ -27,6 +27,11 @@ public:
 
     /** Power off */
     void powerOff();
+
+    /** Check, if any character is available on SIM800Ls UART
+     * @returns - true, if a character is available
+    */
+    bool messageAvailable();
 
     /** Read message from SIM800Ls UART
      * Any line of the message is read separately: <CR><LF>message<CR><LF>
