@@ -1,5 +1,4 @@
-#include <sim800.h>
-#include <logger.h>
+#include "sim800.h"
 
 SIM800::SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
     atSerial{atSerial},
@@ -49,7 +48,6 @@ void SIM800::powerOn() {
     }
 
     if(pwrKeyPin != GPIO_NUM_NC) {
-        gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
         gpio_set_level(pwrKeyPin, LOW);
         delay(1000);
         gpio_set_level(pwrKeyPin, HIGH);
@@ -60,7 +58,6 @@ void SIM800::powerOn() {
 
 void SIM800::powerOff() {
     if(pwrKeyPin != GPIO_NUM_NC) {
-        gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
         gpio_set_level(pwrKeyPin, LOW);
         delay(1000);
         gpio_set_level(pwrKeyPin, HIGH);
@@ -83,34 +80,31 @@ char* SIM800::readMessage() {
         return nullptr;
     }
 
+    readBuffer = (char *)memset(readBuffer, 0, readBufferSize);
+
     while(true){
         // extend buffer size, if necessary
         if(received >= readBufferSize - 2) {
-            readBufferSize = min(readBufferSize + RX_DEFAULT_BUFFER_SIZE, RX_MAX_BUFFER_SIZE + 1);
-            readBuffer = (char *)realloc(readBuffer, readBufferSize);
+            int newSize = min(readBufferSize + RX_DEFAULT_BUFFER_SIZE, RX_MAX_BUFFER_SIZE + 1);
+            readBuffer = (char *)realloc(readBuffer, newSize);
+            memset(&(readBuffer[readBufferSize]), 0, newSize - readBufferSize);
+            readBufferSize = newSize;
         }
 
         // read character
         if(atSerial.readBytes(&c, 1) == 0) {
             break;
         }
-        
-        // exclude leading <cr><lf>
-        if(received == 0 && (c == '\r' || c == '\n')) {
+
+        if(c == '\r') {
             continue;
         }
 
-        readBuffer[received] = c;
-        ++received;
-
-
-        // stop reading, when <cr><ln> received
-        if(received > 2 && readBuffer[received - 2] == '\r' && readBuffer[received - 1] == '\n') {
-            received -= 2;
-            // put trailing zero
-            readBuffer[received - 1] == '\0';
+        if(c == '\n') {
             break;
         }
+
+        readBuffer[received++] = c;
     }
     
     return received > 0 ? readBuffer : nullptr;

@@ -5,6 +5,7 @@
 
 #define RX_DEFAULT_BUFFER_SIZE  64
 #define RX_MAX_BUFFER_SIZE      1460
+#define CRLF "\r\n"
 
 class SIM800
 {
@@ -35,8 +36,7 @@ public:
 
     /** Read message from SIM800Ls UART
      * Any line of the message is read separately: <CR><LF>message<CR><LF>
-     * @rcvBuff - if not null, the received string will be copied into
-     * @returns - number of read bytes, -1 in case of error
+     * @returns - pointer to the message. In case of no message, nullptr is returned
      */
     char* readMessage();
 
