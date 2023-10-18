@@ -10,13 +10,17 @@ class SIM800
 {
 public:
     /** Default constructor
-     * @atStream - UART, which SIM800L is connected to
+     * @atStream - UART for communication with SIM800L
+     * @txPin - pin number, which the TXD pin of SIM800L is connected to
+     * @rxPin - pin number, which the RXD pin of SIM800L is connected to
      * @powerPin - pin number for control SIM800 power supply
      * @pwrKeyPin - pin number, which the PWRKEY pin of SIM800L is connected to
      * @rstPin - pin number, which the RST pin of SIM800L is connected to
      * @dtrPin - pin number, which the DTR pin of SIM800L is connected to
      */
-    SIM800(HardwareSerial atSerial, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
+    SIM800(HardwareSerial atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
+
+    ~SIM800();
 
     /** Power on */
     void powerOn();
@@ -38,6 +42,8 @@ public:
 
 private:
     HardwareSerial &atSerial;
+    gpio_num_t txPin;
+    gpio_num_t rxPin;
     gpio_num_t powerPin;
     gpio_num_t pwrKeyPin;
     gpio_num_t rstPin;

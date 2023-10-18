@@ -1,7 +1,9 @@
 #include <sim800.h>
 
-SIM800::SIM800(HardwareSerial atSerial, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
+SIM800::SIM800(HardwareSerial atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
     atSerial{atSerial},
+    txPin{txPin},
+    rxPin{rxPin},
     powerPin{powerPin},
     pwrKeyPin{pwrKeyPin},
     rstPin{rstPin},
@@ -9,12 +11,12 @@ SIM800::SIM800(HardwareSerial atSerial, gpio_num_t powerPin, gpio_num_t pwrKeyPi
 {
     if(powerPin != GPIO_NUM_NC) {
         gpio_set_direction(powerPin, GPIO_MODE_OUTPUT);
-        gpio_set_level(powerPin, HIGH);
+        gpio_set_level(powerPin, LOW);
     }
 
     if(pwrKeyPin != GPIO_NUM_NC) {
         gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
-        gpio_set_level(pwrKeyPin, LOW);
+        gpio_set_level(pwrKeyPin, HIGH);
     }
 
     if(rstPin != GPIO_NUM_NC) {
@@ -27,29 +29,41 @@ SIM800::SIM800(HardwareSerial atSerial, gpio_num_t powerPin, gpio_num_t pwrKeyPi
         gpio_set_level(dtrPin, LOW);
     }
     
-    atSerial.begin(115200);
     atSerial.setRxBufferSize(RX_MAX_BUFFER_SIZE);
+    atSerial.begin(115200, SERIAL_8N1, txPin, rxPin);
 
     // allocate memory for read buffer
     readBufferSize = RX_DEFAULT_BUFFER_SIZE + 1;
     readBuffer = (char *)malloc(readBufferSize);
 }
 
-void SIM800::powerOn() {
-    if(pwrKeyPin != GPIO_NUM_NC) {
-        gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
-        gpio_set_level(pwrKeyPin, LOW);
-    }
+SIM800::~SIM800() {
+    atSerial.end();
+    free(readBuffer);
+}
 
+void SIM800::powerOn() {
     if(powerPin != GPIO_NUM_NC) {
         gpio_set_level(powerPin, HIGH);
     }
+
+    if(pwrKeyPin != GPIO_NUM_NC) {
+        gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
+        gpio_set_level(pwrKeyPin, LOW);
+        delay(1000);
+        gpio_set_level(pwrKeyPin, HIGH);
+        delay(2000);
+    }
+
 }
 
 void SIM800::powerOff() {
     if(pwrKeyPin != GPIO_NUM_NC) {
         gpio_set_direction(pwrKeyPin, GPIO_MODE_OUTPUT);
+        gpio_set_level(pwrKeyPin, LOW);
+        delay(1000);
         gpio_set_level(pwrKeyPin, HIGH);
+        delay(2000);
     }
 
     if(powerPin != GPIO_NUM_NC) {
@@ -63,14 +77,7 @@ char* SIM800::readMessage() {
         // extend buffer size, if necessary
         if(received + buffered >= readBufferSize - 1) {
             int newSize = received + buffered + 1;
-            char *tmpBuff = (char *)malloc(newSize);
-            if(tmpBuff == nullptr) {
-                return nullptr;
-            }
-
-            free(readBuffer);
-            readBuffer = tmpBuff;
-            readBufferSize = newSize;
+            readBuffer = (char *)realloc(readBuffer, newSize);
         }
 
         // read buffered bytes
@@ -101,4 +108,9 @@ char* SIM800::readMessage() {
     }
 
     return nullptr;
+}
+
+void SIM800::writeMessage(const char *message) {
+    atSerial.print(message);
+    // atSerial.write('\r');
 }
