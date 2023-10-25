@@ -6,41 +6,56 @@
 
 SIM800 gsm(Serial1, GSM_TX_PIN, GSM_RX_PIN, GSM_POWER_PIN, GSM_PWRKEY_PIN, GSM_RESET_PIN, GSM_DTR_PIN);
 
-void test_sim800_power_on_off() {
+bool verify_at_ok() {
     for(int i = 0; i < 5; i++) {
-        gsm.powerOff();
-        delay(100);
-        gsm.powerOn();
-        delay(100);
+        gsm.writeMessage("AT");
+        uint32_t starttime = millis();
+        while(millis() < starttime + 200) {
+            if(gsm.messageAvailable()) {
+                auto rcvd = gsm.readMessage();
+                if(rcvd != nullptr && strcmp(rcvd, "OK") == 0) {
+                    return true;
+                }
+            }
+            delay(10);
+        }
     }
 
-    TEST_ASSERT(true);
+    return false;
+}
+
+void test_sim800_power_on_off() {
+    gsm.powerOff();
+    TEST_ASSERT(!verify_at_ok());
+    gsm.powerOn();
+    TEST_ASSERT(verify_at_ok());
 }
 
 void test_sim800_read_write() {
-    char *rcvMsg;
-    gsm.powerOn();
+    const char *rcvMsg;
     for(int i = 0; i < 10; i++) {
         gsm.writeMessage("AT");
         while(gsm.messageAvailable()) {
             rcvMsg = gsm.readMessage();
         }
+        delay(100);
     }
     
-    printf(rcvMsg);
-    TEST_ASSERT_EQUAL_STRING("OK", rcvMsg);
+    TEST_ASSERT(rcvMsg != nullptr);
+    if(rcvMsg != nullptr) {
+        TEST_ASSERT_EQUAL_STRING("OK", rcvMsg);
+    }
 }
 
 void test_sim800_memory_leak() {
-    char *rcvMsg;
-    gsm.powerOn();
+    const char *rcvMsg;
     for(int i = 0; i < 10; i++) {
         gsm.writeMessage("AT");
         while(gsm.messageAvailable()) {
             rcvMsg = gsm.readMessage();
         }
 
-        if(strcmp(rcvMsg, "OK") == 0) {
+        if(rcvMsg != nullptr && strcmp(rcvMsg, "OK") == 0) {
             break;
         }
     }
@@ -54,7 +69,7 @@ void test_sim800_memory_leak() {
             rcvMsg = gsm.readMessage();
         }
 
-        if(strcmp(rcvMsg, "OK") == 0) {
+        if(rcvMsg != nullptr && strcmp(rcvMsg, "OK") == 0) {
             responces++;
         }
     }
@@ -64,7 +79,6 @@ void test_sim800_memory_leak() {
     size_t finalFreeSize = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     TEST_ASSERT_EQUAL(initialFreeSize, finalFreeSize);
 }
-
 
 void test_sim800() {
     gsm.powerOn();

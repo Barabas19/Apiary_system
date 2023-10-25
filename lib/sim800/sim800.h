@@ -5,13 +5,12 @@
 
 #define RX_DEFAULT_BUFFER_SIZE  64
 #define RX_MAX_BUFFER_SIZE      1460
-#define CRLF "\r\n"
 
 class SIM800
 {
 public:
     /** Default constructor
-     * @atStream - UART for communication with SIM800L
+     * @uart - UART for communication with SIM800L
      * @txPin - pin number, which the TXD pin of SIM800L is connected to
      * @rxPin - pin number, which the RXD pin of SIM800L is connected to
      * @powerPin - pin number for control SIM800 power supply
@@ -19,7 +18,7 @@ public:
      * @rstPin - pin number, which the RST pin of SIM800L is connected to
      * @dtrPin - pin number, which the DTR pin of SIM800L is connected to
      */
-    SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
+    SIM800(HardwareSerial &uart, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin);
 
     ~SIM800();
 
@@ -38,7 +37,7 @@ public:
      * Any line of the message is read separately: <CR><LF>message<CR><LF>
      * @returns - pointer to the message. In case of no message, nullptr is returned
      */
-    char* readMessage();
+    const char* readMessage();
 
     /** Write message to SIM800Ls UART
      * @message - message to be sent
@@ -46,7 +45,7 @@ public:
     void writeMessage(const char *message);
 
 private:
-    HardwareSerial &atSerial;
+    HardwareSerial &uart;
     gpio_num_t txPin;
     gpio_num_t rxPin;
     gpio_num_t powerPin;

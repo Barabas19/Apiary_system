@@ -1,7 +1,7 @@
 #include "sim800.h"
 
-SIM800::SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
-    atSerial{atSerial},
+SIM800::SIM800(HardwareSerial &uart, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
+    uart{uart},
     txPin{txPin},
     rxPin{rxPin},
     powerPin{powerPin},
@@ -29,8 +29,8 @@ SIM800::SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpi
         gpio_set_level(dtrPin, LOW);
     }
     
-    atSerial.setRxBufferSize(RX_MAX_BUFFER_SIZE);
-    atSerial.begin(115200, SERIAL_8N1, txPin, rxPin);
+    uart.setRxBufferSize(RX_MAX_BUFFER_SIZE);
+    uart.begin(115200, SERIAL_8N1, txPin, rxPin);
 
     // allocate memory for read buffer
     readBufferSize = RX_DEFAULT_BUFFER_SIZE + 1;
@@ -38,7 +38,7 @@ SIM800::SIM800(HardwareSerial &atSerial, gpio_num_t txPin, gpio_num_t rxPin, gpi
 }
 
 SIM800::~SIM800() {
-    atSerial.end();
+    uart.end();
     free(readBuffer);
 }
 
@@ -53,7 +53,6 @@ void SIM800::powerOn() {
         gpio_set_level(pwrKeyPin, HIGH);
         delay(2000);
     }
-
 }
 
 void SIM800::powerOff() {
@@ -67,13 +66,20 @@ void SIM800::powerOff() {
     if(powerPin != GPIO_NUM_NC) {
         gpio_set_level(powerPin, LOW);
     }
+
+    delay(2000);
+
+    uart.flush();
+    while(SIM800::messageAvailable()) {
+        SIM800::readMessage();
+    }
 }
 
 bool SIM800::messageAvailable() {
-    return atSerial.available();
+    return uart.available();
 }
 
-char* SIM800::readMessage() {
+const char* SIM800::readMessage() {
     int received = 0;
     char c;
     if(!messageAvailable()) {
@@ -92,7 +98,7 @@ char* SIM800::readMessage() {
         }
 
         // read character
-        if(atSerial.readBytes(&c, 1) == 0) {
+        if(uart.readBytes(&c, 1) == 0) {
             break;
         }
 
@@ -111,6 +117,6 @@ char* SIM800::readMessage() {
 }
 
 void SIM800::writeMessage(const char *message) {
-    atSerial.print(message);
-    atSerial.write('\r');
+    uart.print(message);
+    uart.write('\r');
 }
