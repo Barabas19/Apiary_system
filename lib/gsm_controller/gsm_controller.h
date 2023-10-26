@@ -27,6 +27,9 @@ public:
     */
     bool init();
 
+    /** Disconnect from network
+     * @returns - true, if successfully deinitialized
+    */
     bool deinit();
 
     /** Get date, time and location from the network
@@ -38,8 +41,18 @@ public:
     */
     bool getTimeDateLocation(char *timePtr, char *datePtr = nullptr, double *longPtr = nullptr, double *latPtr = nullptr);
     
+    /** Get local date and time
+     * @timePtr - pointer, where the time should be copied to. Format hh:mm:ss
+     * @datePtr - pointer, where the date should be copied to. Format YYYY/MM/DD
+     * @returns - true, if successfully received
+    */
     bool getLocalDateTime(char *timePtr, char *datePtr = nullptr);
-    int getBatteryLevel();
+    
+    /** Send HTTP GET request
+     * @url - full url to be sent
+     * @payload - payload returned
+     * @returns - true, if successfully sent
+    */
     bool sendHttpGetReq(const char *url, char *payload);
     
 private:
@@ -55,7 +68,7 @@ private:
     bool verifyResponse(const char *message, const char *rgx);
 
     /** Wait for message from modem
-     * @rgx - regex of the message, that should be received
+     * @rgx - regex of the message, that should be received. Use nullptr to read any message
      * @returns - pointer to the desired message or nullptr, if nothing received
     */
     const char* waitForMessage(const char *rgx, uint32_t timeout_ms = 1000);
