@@ -57,15 +57,15 @@ public:
     
 private:
     SIM800 *modem;
-    char *apn;
+    char apn[32];
     bool initialized;
 
-    /** Check the message due to regex
+    /** Check the message, if contains a substring
      * @message - the message to be verified
-     * @rgx - regex
-     * @returns - true, if regex found in the message
+     * @substr - substring
+     * @returns - true, if substring found in the message
     */
-    bool verifyResponse(const char *message, const char *rgx);
+    bool verifyResponse(const char *message, const char *substr);
 
     /** Wait for message from modem
      * @rgx - regex of the message, that should be received. Use nullptr to read any message
