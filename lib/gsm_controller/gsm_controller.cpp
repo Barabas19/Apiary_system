@@ -1,11 +1,8 @@
-#include <regex>
-
 #include "gsm_controller.h"
 #include "logger.h"
 #include "apn_list.h"
 
 GsmController::GsmController(HardwareSerial &modemUart, gpio_num_t txPin, gpio_num_t rxPin, gpio_num_t powerPin, gpio_num_t pwrKeyPin, gpio_num_t rstPin, gpio_num_t dtrPin) :
-apn{nullptr},
 initialized{false}
 {
     modem = new SIM800(modemUart, txPin, rxPin, powerPin, pwrKeyPin, rstPin, dtrPin);
@@ -41,8 +38,9 @@ bool GsmController::powerOffModem() {
 }
 
 bool GsmController::init() {
-    const char *TAG = "Initialization";
     const char *respPtr;
+    char *tempPtr = nullptr;
+    char *token;
     bool tmpRes = false;
     bool localTimestampEnabled = false;
     initialized = false;
@@ -51,177 +49,143 @@ bool GsmController::init() {
     // 1.  AT -> OK - verify modem state
     // 2.  power on
     // 3.  ATE0 -> OK - echo off
-    // 4.  wait for "+CFUN: 1"
-    // 5.  AT+CLTS? -> +CLTS: 0(1) - get local timestamp mode
-    // 6.  wait for "OK"
-    // 7.  AT+CLTS=1;&W -> OK - enable local timestamp
-    // 8.  wait for unsolicited *PSNWID: "<mcc>", "<mnc>", "<full network name>", <full network name CI>, "<short network name>",<short network name CI>
-    // 9.  AT+CFUN=1,1 -> OK  - set full functionality  and reset MT
-    // 10.  AT+CSCLK=0 -> OK - disable slow clock
-    // 11. AT+CREG? -> +CREG: - get network registration status
-    // 12. wait for "OK"
-    // 13. AT+CPIN? -> READY(SIM PIN) - get pin status
-    // 14. wait for "OK"
-    // 15. wait 5s for any unsolicite messages "SMS Ready"/"Call Ready"
-    // 16. open bearer
-    // 17. finish
+    // 4.  AT+CLTS=1;&W -> OK - enable local timestamp
+    // 5.  AT+CSCLK=0 -> OK - disable slow clock
+    // 6.  AT+CREG? -> +CREG: - get network registration status
+    // 7.  wait for "OK"
+    // 8.  AT+CPIN? -> READY(SIM PIN) - get pin status
+    // 9.  wait for "OK"
+    // 10. Get operator name and select APN
+    // 11. open bearer
+    // 12. finish
 
     // 1.  AT -> OK - modem is on/off
-    LOG_V("%s: verify modem state...", TAG);
+    LOG_V("Verify modem state...");
     tmpRes = pingModem();
 
     // 2.  power on
     if(!tmpRes) {
-        LOG_V("%s: no response for 'AT' command.", TAG);
+        LOG_V("No response for 'AT' command.");
         if(!powerOnModem()) {
-            LOG_E("%s: power on failed.", TAG);
+            LOG_E("Power on failed.");
             return false;
         }
     }
 
     // 3.  ATE0 -> OK - echo off
+    LOG_D("Switch echo off...");
     if(!executeAtCmd("ATE0", "OK")) {
-        LOG_E("%s: echo off failed.", TAG);
+        LOG_E("Echo off failed.");
         return false;
     }
 
-    // 4.  wait for "+CFUN: 1"
-    if(!waitForMessage("+CFUN: 1", 10000)) {
-        LOG_E("%s: no +CFUN received.", TAG);
+    // 4.  AT+CLTS=1;&W -> OK - enable local timestamp
+    LOG_D("Enable local timestamp...");
+    if(!executeAtCmd("AT+CLTS=1", "OK", 5000)) {
+        LOG_E("Failed to enable local timestamp.");
         return false;
     }
 
-    // 5.  AT+CLTS? -> +CLTS: [0-9] - get local timestamp mode
-    respPtr = executeAtCmd("AT+SLTS?", "+CLTS: [0-9]");
-    if(!respPtr) {
-        LOG_E("%s: failed to get local timestamp mode.", TAG);
+    // 5.  AT+CSCLK=0 -> OK - disable slow clock
+    LOG_D("Disable slow clock...");
+    if(!executeAtCmd("AT+CSCLK=0", "OK", 5000)) {
+        LOG_E("Failed to disable slow clock.");
         return false;
     }
 
-    localTimestampEnabled = verifyResponse(respPtr, "+CLTS: 1");
-
-    // 6.  wait for "OK"
-    if(!waitForMessage("OK")) {
-        LOG_E("%s: no OK received after AT+SLTS?.", TAG);
-        return false;
-    }
-
-    // 7.  AT+CLTS=1;&W -> OK - enable local timestamp
-    if(!localTimestampEnabled) {
-        respPtr = executeAtCmd("AT+CLTS=1;&W", "OK");
-        if(!respPtr) {
-            LOG_E("%s: failed to enable local timestamp.", TAG);
-            return false;
-        }
-    }
-
-    // 8.  wait for unsolicited *PSNWID
-    respPtr = waitForMessage("PSNWID", 5000);
-    if(respPtr) {
-        // PSNWID: "<mcc>", "<mnc>", "<full network name>"
-        char *tempRespPtr = (char *)calloc(strlen(respPtr) + 1, 1);
-        strcpy(tempRespPtr, respPtr);
-        strtok(tempRespPtr, "\""); // 1st token *PSNWID: "
-        int mcc = atoi(strtok(NULL, "\""));
-        strtok(NULL, "\"");
-        int mnc = atoi(strtok(NULL, "\""));
-        strtok(NULL, "\"");
-        apn = (char *)calloc(strlen(apn_list[mcc][mnc]) + 1, 1);
-        strcpy(apn, apn_list[mcc][mnc]);
-        LOG_I("%s: provider detected '%s', apn name '%s'.", TAG, strtok(NULL, "\""), apn);
-        free(tempRespPtr);
-    } else if (apn == nullptr) {
-        apn = (char *)malloc(sizeof(DEFAULT_APN_NAME));
-        strcpy(apn, DEFAULT_APN_NAME);
-        LOG_W("%s: no provider detected, use default apn name '%s'.", TAG, apn);
-    }
-
-    // 9.  AT+CFUN=1,1 -> OK  - set full functionality  and reset MT
-    if(!localTimestampEnabled) {
-        respPtr = executeAtCmd("AT+CFUN=1,1", "OK", 10000);
-        if(!respPtr) {
-            LOG_E("%s: failed to set full functionality  and reset MT.", TAG);
-            return false;
-        }
-    }
-
-    // 10.  AT+CSCLK=0 -> OK - disable slow clock
-    if(!executeAtCmd("AT+CSCLK=0", "OK")) {
-        LOG_E("%s: failed to disable slow clock.", TAG);
-        return false;
-    }
-
-    // 11. AT+CREG? -> +CREG: [0-9],[0-9] - get network registration status
+    // 6. AT+CREG? -> +CREG: [0-9],[0-9] - get network registration status
+    LOG_D("Get network registration status...");
     int retries = 5;
-    bool registered, denied;
-    for(int i = 1, registered = false, denied = false; !registered && !denied; i++) {
+    bool registered = false, denied = false;
+    for(int i = 1; !registered && !denied; i++) {
         delay(2000); // wait 2s for if network registration
-        respPtr = executeAtCmd("AT+CREG?", "+CREG: [0-9],[0-9]");
+        respPtr = executeAtCmd("AT+CREG?", "+CREG:", 10000);
         if(respPtr) {
             switch (respPtr[9]) // verify registration status
             {
             case '1':
-            case '5':
                 registered = true;
+                LOG_V("Registered in home network.");
+                break;
+            case '2':
+                LOG_V("Searching for operator...");
                 break;
             case '3':
                 denied = true;
+                LOG_D("Registeration denied.");
+                break;
+            case '5':
+                registered = true;
+                LOG_V("Registered in roaming.");
                 break;
             default:
+                LOG_D("Registeration state unknown (%c).", respPtr[9]);
                 break;
             }
         }
         else if(i == retries) {
             waitForMessage("OK");
-            LOG_E("%s: failed to get network registration status.", TAG);
+            LOG_E("Failed to get network registration status.");
             return false;
         }
     }
 
-    // 12. wait for "OK"
+    // 7. wait for "OK"
+    LOG_D("Wait for OK...");
     if(!waitForMessage("OK")) {
-        LOG_E("%s: no OK received after AT+CREG?.", TAG);
+        LOG_E("No OK received after AT+CREG?.");
         return false;
     }
 
     if(!registered) {
 
-    // 13. AT+CPIN? -> READY(SIM PIN) - get pin status
+    // 8. AT+CPIN? -> READY(SIM PIN) - get pin status
+    LOG_D("Get pin status...");
         if(!executeAtCmd("AT+CPIN?", "READY")) {
             waitForMessage("OK");
-            LOG_E("%s: failed to register - SIM PIN lock active.", TAG);
+            LOG_E("Failed to register - SIM PIN lock active.");
             return false;
         }
 
-    // 14. wait for "OK"
+    // 9. wait for "OK"
         if(!waitForMessage("OK")) {
-            LOG_E("%s: no OK received after AT+CPIN?.", TAG);
+            LOG_E("No OK received after AT+CPIN?.");
             return false;
         }
     }
 
-    // 15. wait 5s for any unsolicite messages "SMS Ready"/"Call Ready"
-    if(waitForMessage("SMS Ready", 5000)) {
-        registered = true;
-    } else {
-        LOG_E("%s: no 'SMS Ready' received.", TAG);
+    // 10. Get operator name and select APN
+    respPtr = executeAtCmd("AT+COPS?", "+COPS"); // +COPS: <mode>,<format>,"<oper>"
+    tempPtr = (char *)calloc(strlen(respPtr) + 1, 1);
+    strcpy(tempPtr, respPtr);
+    strtok(tempPtr, "\""); // +COPS: <mode>,<format>,
+    token = strtok(NULL, "\"");
+    LOG_I("Registered with operator '%s'.", token);
+    if(apn_list.find((const char *)token) == apn_list.end()) {
+        LOG_E("Operator '%s' not known.", token);
+        free(tempPtr);
         return false;
     }
+    
+    strcpy(apn, apn_list[(const char *)token]);
+    LOG_I("APN '%s'.", apn);
+    free(tempPtr);
 
-    // 16. open bearer
-    if(registered && !openBearer()) {
-        LOG_E("%s: failed to open bearer.", TAG);
-        return false;
-    }
+    // 10. open bearer
+    // if(registered && !openBearer()) {
+    //     LOG_E("Failed to open bearer.");
+    //     return false;
+    // }
 
-    // 17. finish
+    // 11. finish
     if(registered) {
         initialized = true;
-        LOG_I("%s: successfully connected to network.", TAG);
+        LOG_I("Successfully connected to network.");
     } else {
-        LOG_E("%s: failed - reason unknown.", TAG);
-        return false;
+        LOG_E("Failed - reason unknown.");
     }
+
+    return registered;
 }
 
 bool GsmController::deinit() {
@@ -280,7 +244,7 @@ bool GsmController::getTimeDateLocation(char *timePtr, char *datePtr, double *lo
     return false;
 }
 
-bool GsmController::getLocalDateTime(char *timePtr, char *datePtr = nullptr) {
+bool GsmController::getLocalDateTime(char *timePtr, char *datePtr) {
     const char *TAG = "GetLocalDateTime";
     const char *respPtr;
     char *tempRespPtr;
@@ -443,8 +407,10 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     return res;
 }
 
-bool GsmController::verifyResponse(const char *message, const char *rgx) {
-    bool res = std::regex_match(message, std::regex(rgx));
+bool GsmController::verifyResponse(const char *message, const char *substr) {
+    LOG_D("Verification '%s' vs '%s'", message, substr);
+    bool res = strstr(message, substr) != nullptr;
+    LOG_D("Verification %s", res ? "passed" : "not passed");
     return res;
 }
 
@@ -453,7 +419,7 @@ const char* GsmController::waitForMessage(const char *rgx, uint32_t timeout_ms) 
     while(millis() < startTime + timeout_ms) {
         if(modem->messageAvailable()) {
             const char *msgPtr = modem->readMessage();
-            if(msgPtr != nullptr && (!rgx || verifyResponse(msgPtr, rgx))) {
+            if((msgPtr != nullptr) && (!rgx || verifyResponse(msgPtr, rgx))) {
                 LOG_D("Message received: %s", msgPtr);
                 return msgPtr;
             }
@@ -480,21 +446,20 @@ const char* GsmController::executeAtCmd(const char *command, const char* respons
 
 bool GsmController::pingModem(uint8_t retries) {
     LOG_D("Pinging modem...");
-        for(int i = 0; i < retries; i++) {
-            if(executeAtCmd("AT", "OK", 5000)) {
-                LOG_D("Ping received.");
-                return true;
-            }
-
-            delay(100);
+    executeAtCmd("AT");
+    for(int i = 0; i < retries; i++) {
+        delay(100);
+        if(executeAtCmd("AT", "OK")) {
+            LOG_D("Ping received.");
+            return true;
         }
-
-        LOG_D("Ping failed.");
-        return false;
     }
 
+    LOG_D("Ping failed.");
+    return false;
+}
+
 bool GsmController::openBearer() {
-    const char *TAG = "Open bearer";
     const char *respPtr;
 
     // steps
@@ -504,44 +469,46 @@ bool GsmController::openBearer() {
     // 4. AT+SAPBR=2,1 -> +SAPBR: - query bearer
     // 5. wait for OK
 
-    LOG_I("%s: start GPRS connection...", TAG);
+    LOG_I("Start GPRS connection...");
 
     // 1. AT+SAPBR=3,1,"Contype","GPRS" -> OK - configure bearer
+    LOG_D("Set connection type GPRS...");
     if(!executeAtCmd("AT+SAPBR=3,1,\"Contype\",\"GPRS\"", "OK")) {
-        LOG_E("%s: failed to configure bearer.", TAG);
+        LOG_E("Failed to configure bearer.");
         return false;
     }
 
     // 2. AT+SAPBR=3,1,"APN","<apn>" -> OK - configure bearer
+
     char *buffer = (char *)calloc(64, 1);
     sprintf(buffer, "AT+SAPBR=3,1,\"APN\",\"%s\"", apn);
     respPtr = executeAtCmd(buffer, "OK");
     free(buffer);
     if(!respPtr) {
-        LOG_E("%s: failed to configure bearer.", TAG);
+        LOG_E("Failed to configure bearer.");
         return false;
     }
 
     // 3. AT+SAPBR=1,1 -> OK - open bearer
     if(!executeAtCmd("AT+SAPBR=1,1", "OK")) {
-        LOG_E("%s: failed to open bearer.", TAG);
+        LOG_E("Failed to open bearer.");
         return false;
     }
 
     // 4. AT+SAPBR=2,1 -> +SAPBR: - query bearer
     respPtr = executeAtCmd("AT+SAPBR=2,1", "+SAPBR:1,1", 5000);
     if(!respPtr) {
-        LOG_E("%s: failed to query bearer.", TAG);
+        LOG_E("Failed to query bearer.");
         return false;
     }
 
     // 5. wait for OK
     if(!waitForMessage("OK")) {
-        LOG_E("%s: no OK received after query bearer.", TAG);
+        LOG_E("No OK received after query bearer.");
         return false;
     }
 
-    LOG_I("%s: connected to GPRS", TAG);
+    LOG_I("Connected to GPRS.");
     return true;
 }
 
