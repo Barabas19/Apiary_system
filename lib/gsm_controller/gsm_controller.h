@@ -2,6 +2,7 @@
 #define GSMCONTROLLER_H
 
 #include <Arduino.h>
+#include <time.h>
 
 #include "sim800.h"
 
@@ -33,20 +34,18 @@ public:
     bool deinit();
 
     /** Get date, time and location from the network
-     * @timePtr - pointer, where the time should be copied to. Format hh/mm/ss
-     * @datePtr - pointer, where the date should be copied to. Format YYYY/MM/DD
+     * @dt - time structure
      * @longPtr - pointer, where the longitude should be copied to
      * @latPtr - pointer, where the latitude should be copied to
      * @returns - true, if successfully received
     */
-    bool getTimeDateLocation(char *timePtr, char *datePtr = nullptr, double *longPtr = nullptr, double *latPtr = nullptr);
+    bool getTimeDateLocation(struct tm &dt, double *longPtr = nullptr, double *latPtr = nullptr);
     
     /** Get local date and time
-     * @timePtr - pointer, where the time should be copied to. Format hh:mm:ss
-     * @datePtr - pointer, where the date should be copied to. Format YYYY/MM/DD
+     * @dt - time structure
      * @returns - true, if successfully received
     */
-    bool getLocalDateTime(char *timePtr, char *datePtr = nullptr);
+    bool getLocalDateTime(struct tm &dt);
     
     /** Send HTTP GET request
      * @url - full url to be sent
@@ -68,18 +67,18 @@ private:
     bool verifyResponse(const char *message, const char *substr);
 
     /** Wait for message from modem
-     * @rgx - regex of the message, that should be received. Use nullptr to read any message
+     * @msgSubstr - substring of the message, that should be received. Use nullptr to read any message
      * @returns - pointer to the desired message or nullptr, if nothing received
     */
-    const char* waitForMessage(const char *rgx, uint32_t timeout_ms = 1000);
+    const char* waitForMessage(const char *msgSubstr = nullptr, uint32_t timeout_ms = 1000);
 
     /** Execute AT command
      * @command - command to be executed
-     * @responseRgx - regex of the response, that should be received, or nullptr to do not check the response
+     * @respSubstr - substring of the response, that should be received, or nullptr to do not check the response
      * @timeout_ms - execution timeout in ms
      * @returns - pointer to the response or nullptr, if nothing received
     */
-    const char* executeAtCmd(const char *command, const char* responseRgx = nullptr, uint32_t timeout_ms = 1000);
+    const char* executeAtCmd(const char *command, const char* respSubstr = nullptr, uint32_t timeout_ms = 1000);
 
     /** Send several AT commands to verify modem state
      * @retries - number of retries

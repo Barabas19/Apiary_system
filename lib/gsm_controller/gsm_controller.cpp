@@ -24,10 +24,12 @@ bool GsmController::powerOnModem() {
 bool GsmController::powerOffModem() {
     LOG_V("Power off modem...");
     
-    GsmController::deinit();
+    if(initialized) {
+        deinit();
+    }
 
     modem->powerOff();
-    bool res = !GsmController::pingModem();
+    bool res = !pingModem();
     if(res) {
         LOG_I("Modem is powered off.");
         return true;
@@ -53,11 +55,10 @@ bool GsmController::init() {
     // 5.  AT+CSCLK=0 -> OK - disable slow clock
     // 6.  AT+CREG? -> +CREG: - get network registration status
     // 7.  wait for "OK"
-    // 8.  AT+CPIN? -> READY(SIM PIN) - get pin status
+    // 8.  AT+COPS? -> +COPS: <mode>,<format>,"<oper>" - Get operator name and select APN
     // 9.  wait for "OK"
-    // 10. Get operator name and select APN
-    // 11. open bearer
-    // 12. finish
+    // 10. open bearer
+    // 11. finish
 
     // 1.  AT -> OK - modem is on/off
     LOG_V("Verify modem state...");
@@ -154,7 +155,7 @@ bool GsmController::init() {
         }
     }
 
-    // 10. Get operator name and select APN
+    // 8. AT+COPS? -> +COPS: <mode>,<format>,"<oper>" - Get operator name and select APN
     respPtr = executeAtCmd("AT+COPS?", "+COPS"); // +COPS: <mode>,<format>,"<oper>"
     tempPtr = (char *)calloc(strlen(respPtr) + 1, 1);
     strcpy(tempPtr, respPtr);
@@ -166,16 +167,24 @@ bool GsmController::init() {
         free(tempPtr);
         return false;
     }
-    
+
     strcpy(apn, apn_list[(const char *)token]);
     LOG_I("APN '%s'.", apn);
     free(tempPtr);
 
+    // 9. wait for "OK"
+    LOG_D("Wait for OK...");
+    if(!waitForMessage("OK")) {
+        LOG_E("No OK received after AT+CREG?.");
+        return false;
+    }
+
+
     // 10. open bearer
-    // if(registered && !openBearer()) {
-    //     LOG_E("Failed to open bearer.");
-    //     return false;
-    // }
+    if(registered && !openBearer()) {
+        LOG_E("Failed to open bearer.");
+        return false;
+    }
 
     // 11. finish
     if(registered) {
@@ -190,14 +199,14 @@ bool GsmController::init() {
 
 bool GsmController::deinit() {
     if(initialized) {
+        initialized = false;
         return closeBearer();
     }
 
     return true;
 }
 
-bool GsmController::getTimeDateLocation(char *timePtr, char *datePtr, double *longPtr, double *latPtr) {
-    const char *TAG = "GetTimeDateLocation";
+bool GsmController::getTimeDateLocation(struct tm &dt, double *longPtr, double *latPtr) {
     const char *respPtr;
     char *tempRespPtr;
     char *token;
@@ -207,45 +216,47 @@ bool GsmController::getTimeDateLocation(char *timePtr, char *datePtr, double *lo
     if(respPtr) {
         // decode received string
         tempRespPtr = (char *)calloc(strlen(respPtr) + 1, 1);
-        strtok(tempRespPtr, ":"); // +CIPGSMLOC
+        strcpy(tempRespPtr, respPtr);
+        strtok(tempRespPtr, " "); // +CIPGSMLOC:
         int locCode = atoi(strtok(NULL, ",")); // <locationcode>
+        LOG_D("Location code: %d", locCode);
         if(locCode != 0) {
-            LOG_E("%s: failed, AT+CIPGSMLOC return value = %d.", TAG, locCode);
+            LOG_E("AT+CIPGSMLOC return value = %d.", locCode);
             free(tempRespPtr);
             return false;
         }
 
         double longitude = atof(strtok(NULL, ",")); // <longitude>
+        LOG_D("Longitude: %.5f", longitude);
         if(longPtr) {
             *longPtr = longitude;
         }
 
         double latitude = atof(strtok(NULL, ",")); // <latitude>
+        LOG_D("Latitude: %.5f", latitude);
         if(latPtr) {
             *latPtr = latitude;
         }
 
-        token = strtok(NULL, ","); // <date>
-        if(datePtr) {
-            strcpy(datePtr, (const char *)token);
-        }
-
-        token = strtok(NULL, ","); // <time>
-        if(timePtr) {
-            strcpy(timePtr, (const char *)token);
-        }
+        // <date> format YYYY/MM/DD
+        dt.tm_year = atoi(strtok(NULL, "/"));
+        dt.tm_mon = atoi(strtok(NULL, "/"));
+        dt.tm_mday = atoi(strtok(NULL, ","));
+        // <time> format hh/mm/ss
+        dt.tm_hour = atoi(strtok(NULL, ":"));
+        dt.tm_min = atoi(strtok(NULL, ":"));
+        dt.tm_sec = atoi(strtok(NULL, ":"));
 
         free(tempRespPtr);
-        LOG_I("%s: success: %s", TAG, respPtr);
+        LOG_I("Date, time, location: %s", respPtr);
         return true;
     } 
 
-    LOG_E("%s: failed to obtain date, time, location.", TAG);
+    LOG_E("Failed to obtain date, time, location.");
     return false;
 }
 
-bool GsmController::getLocalDateTime(char *timePtr, char *datePtr) {
-    const char *TAG = "GetLocalDateTime";
+bool GsmController::getLocalDateTime(struct tm &dt) {
     const char *respPtr;
     char *tempRespPtr;
     char *token;
@@ -254,41 +265,25 @@ bool GsmController::getLocalDateTime(char *timePtr, char *datePtr) {
     respPtr = executeAtCmd("AT+CCLK?", "+CCLK:");
     if(respPtr) {
         tempRespPtr = (char *)calloc(strlen(respPtr) + 1, 1);
-        LOG_V("%s: decode received string.", TAG);
+        strcpy(tempRespPtr, respPtr);
+        LOG_V("Decode received string.");
         token = strtok(tempRespPtr, "\""); // first token (+CCLK: ")
-        token  = strtok(NULL, ","); // date (yy/MM/dd)
-        LOG_V("Date: %s", token);
-        if(datePtr) { // new format yyyy/MM/dd
-            datePtr[0] = '2';
-            datePtr[1] = '0';
-            datePtr[2] = token[0];
-            datePtr[3] = token[1];
-            datePtr[4] = '/';
-            datePtr[5] = token[3];
-            datePtr[6] = token[4];
-            datePtr[7] = '/';
-            datePtr[8] = token[6];
-            datePtr[9] = token[7];
-            LOG_V("Formatted date: %s", datePtr);
-        }
-
-        token = strtok(NULL, "+-"); // time (hh:mm:ss)
-        LOG_V("Time: %s", token);
-        if(timePtr) {
-            strcpy(timePtr, token);
-        }
-
+        dt.tm_year = atoi(strtok(NULL, "/")) + 2000;
+        dt.tm_mon = atoi(strtok(NULL, "/"));
+        dt.tm_mday = atoi(strtok(NULL, ","));
+        dt.tm_hour = atoi(strtok(NULL, ":"));
+        dt.tm_min = atoi(strtok(NULL, ":"));
+        dt.tm_sec = atoi(strtok(NULL, "+-"));
         free(tempRespPtr);
-        LOG_I("%s: success: %s", TAG, respPtr);
+        LOG_I("Local date time: %s", respPtr);
         return true;
     }
 
-    LOG_E("%s: failed to obtain local time.", TAG);
+    LOG_E("Failed to obtain local time.");
     return false;
 }
 
 bool GsmController::sendHttpGetReq(const char *url, char *payload) {
-    const char *TAG = "SendHttpGetReq";
     const char *respPtr;
     char *tempPtr = nullptr;
     char *token;
@@ -308,17 +303,17 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
     // 11. finish
 
-    LOG_I("%s: requesting url '%s'", TAG, url);
+    LOG_I("Requesting url '%s'...", url);
 
     // 1.  AT+HTTPINIT -> OK                - Initialize HTTP Service
     if(!executeAtCmd("AT+HTTPINIT", "OK")) {
-        LOG_E("%s: failed to initialize HTTP service.", TAG);
+        LOG_E("Failed to initialize HTTP service.");
         return false;
     }
 
     // 2.  AT+HTTPPARA="CID",1 -> OK        - Set HTTP Parameters Value
     if(!executeAtCmd("AT+HTTPPARA=\"CID\",1", "OK")) {
-        LOG_E("%s: failed to set HTTP CID parameter.", TAG);
+        LOG_E("Failed to set HTTP CID parameter.");
         return false;
     }
 
@@ -328,14 +323,14 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     sprintf(tempPtr, cmdFmt, url);
     res = executeAtCmd((const char *)tempPtr, "OK") != nullptr;
     if(!res) {
-        LOG_E("%s: failed to set HTTP URL parameter.", TAG);
+        LOG_E("Failed to set HTTP URL parameter.");
     }
     
     // 4.  AT+HTTPACTION=0 -> OK            - HTTP Method Action (GET)
     if(res) {
         res = executeAtCmd("AT+HTTPACTION=0", "OK", 5000) != nullptr;
         if(!res) {
-            LOG_E("%s: failed to set HTTP Method Action (GET).", TAG);
+            LOG_E("Failed to set HTTP Method Action (GET).");
         }
     }
 
@@ -344,7 +339,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
         respPtr = waitForMessage("+HTTPACTION", 5000);
         res = respPtr != nullptr;
         if(!res) {
-            LOG_E("%s: no response for HTTP Action GET.", TAG);
+            LOG_E("No response for HTTP Action GET.");
         }
     }
     
@@ -357,7 +352,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
         if(atoi(token) != 200)
         {
             res = false;
-            LOG_E("%s: failed with HTTP code %s.", TAG, token);
+            LOG_E("Failed with HTTP code %s.", token);
         } else {
             token = strtok(NULL, ","); // <DataLen>
             payloadLen = atoi(token);
@@ -368,7 +363,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     if(res && payloadLen > 0) {
         res = executeAtCmd("AT+HTTPREAD", "+HTTPREAD:", 5000) != nullptr;
         if(!res) {
-            LOG_E("%s: failed to obtain HTTP response.", TAG);
+            LOG_E("Failed to obtain HTTP response.");
         }
     }
 
@@ -377,7 +372,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
         respPtr = waitForMessage(nullptr, 5000);
         res = respPtr != nullptr;
         if(!res) {
-            LOG_E("%s: HTTP response cannot be read.", TAG);
+            LOG_E("HTTP response cannot be read.");
         } else {
             strcpy(payload, respPtr);
         }
@@ -386,13 +381,13 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     // 9.  wait for OK
     if(res && payloadLen > 0) {
         if(!waitForMessage("OK")) {
-            LOG_E("%s: no OK after read of HTTP response.", TAG);
+            LOG_E("No OK after read of HTTP response.");
         }
     }
 
     // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
     if(!executeAtCmd("AT+HTTPTERM", "OK")) {
-        LOG_E("%s: failed to terminate HTTP Service.", TAG);
+        LOG_E("Failed to terminate HTTP Service.");
     }
 
     // 11. finish
@@ -401,7 +396,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
     }
 
     if(res) {
-        LOG_I("%s: success. Payload:\n%s", TAG, payload);
+        LOG_I("Payload received:\n%s", payload);
     }
 
     return res;
@@ -414,12 +409,16 @@ bool GsmController::verifyResponse(const char *message, const char *substr) {
     return res;
 }
 
-const char* GsmController::waitForMessage(const char *rgx, uint32_t timeout_ms) {
+const char* GsmController::waitForMessage(const char *msgSubstr, uint32_t timeout_ms) {
     uint32_t startTime = millis();
     while(millis() < startTime + timeout_ms) {
         if(modem->messageAvailable()) {
             const char *msgPtr = modem->readMessage();
-            if((msgPtr != nullptr) && (!rgx || verifyResponse(msgPtr, rgx))) {
+            if(msgPtr == nullptr) {
+                continue;
+            }
+
+            if(msgSubstr == nullptr || verifyResponse(msgPtr, msgSubstr)) {
                 LOG_D("Message received: %s", msgPtr);
                 return msgPtr;
             }
@@ -427,14 +426,14 @@ const char* GsmController::waitForMessage(const char *rgx, uint32_t timeout_ms) 
         delay(10);
     }
 
-    LOG_D("Wait for message '%s' timeouted.", rgx);
+    LOG_D("Wait for message '%s' timeouted.", msgSubstr ? msgSubstr : "");
     return nullptr;
 }
 
-const char* GsmController::executeAtCmd(const char *command, const char* responseRgx, uint32_t timeout_ms) {
-    LOG_D("Execute AT command: %s", command);
+const char* GsmController::executeAtCmd(const char *command, const char* respSubstr, uint32_t timeout_ms) {
+    LOG_D("'%s' -> '%s'", command, (respSubstr ? respSubstr : ""));
     modem->writeMessage(command);
-    const char* res = waitForMessage(responseRgx, timeout_ms);
+    const char* res = waitForMessage(respSubstr, timeout_ms);
     if(res != nullptr) {
         LOG_D("Response received: %s", res);
     } else {
@@ -449,7 +448,7 @@ bool GsmController::pingModem(uint8_t retries) {
     executeAtCmd("AT");
     for(int i = 0; i < retries; i++) {
         delay(100);
-        if(executeAtCmd("AT", "OK")) {
+        if(executeAtCmd("AT", "OK", 200)) {
             LOG_D("Ping received.");
             return true;
         }
@@ -490,13 +489,13 @@ bool GsmController::openBearer() {
     }
 
     // 3. AT+SAPBR=1,1 -> OK - open bearer
-    if(!executeAtCmd("AT+SAPBR=1,1", "OK")) {
+    if(!executeAtCmd("AT+SAPBR=1,1", "OK", 10000)) {
         LOG_E("Failed to open bearer.");
         return false;
     }
 
     // 4. AT+SAPBR=2,1 -> +SAPBR: - query bearer
-    respPtr = executeAtCmd("AT+SAPBR=2,1", "+SAPBR:1,1", 5000);
+    respPtr = executeAtCmd("AT+SAPBR=2,1", "+SAPBR: 1,1", 5000);
     if(!respPtr) {
         LOG_E("Failed to query bearer.");
         return false;
@@ -508,20 +507,19 @@ bool GsmController::openBearer() {
         return false;
     }
 
-    LOG_I("Connected to GPRS.");
+    LOG_I("Successfully connected to GPRS.");
     return true;
 }
 
 bool GsmController::closeBearer() {
-    const char *TAG = "Close bearer";
     const char *respPtr;
 
     // AT+SAPBR=0,1 -> OK - deactivate bearer profile
     if(!executeAtCmd("AT+SAPBR=0,1", "OK", 5000)) {
-        LOG_E("%s: failed to deactivate bearer profile.", TAG);
+        LOG_E("Failed to deactivate bearer profile.");
         return false;
     }
 
-    LOG_I("%s: disconnected from GPRS", TAG);
+    LOG_I("Successfully disconnected from GPRS.");
     return true;
 }
