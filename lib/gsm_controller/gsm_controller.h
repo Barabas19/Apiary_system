@@ -50,9 +50,10 @@ public:
     /** Send HTTP GET request
      * @url - full url to be sent
      * @payload - payload returned
+     * @maxPayloadSize - the maximum payload size to be read
      * @returns - true, if successfully sent
     */
-    bool sendHttpGetReq(const char *url, char *payload);
+    bool sendHttpGetReq(const char *url, char *payload, const uint16_t maxPayloadSize);
     
 private:
     SIM800 *modem;
