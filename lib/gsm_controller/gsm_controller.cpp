@@ -283,7 +283,7 @@ bool GsmController::getLocalDateTime(struct tm &dt) {
     return false;
 }
 
-bool GsmController::sendHttpGetReq(const char *url, char *payload) {
+bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_t maxPayloadSize) {
     const char *respPtr;
     char *tempPtr = nullptr;
     char *token;
@@ -336,7 +336,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
 
     // 5.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
     if(res) {
-        respPtr = waitForMessage("+HTTPACTION", 5000);
+        respPtr = waitForMessage("+HTTPACTION", 10000);
         res = respPtr != nullptr;
         if(!res) {
             LOG_E("No response for HTTP Action GET.");
@@ -359,9 +359,13 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload) {
         }
     }
 
+    int payloadSize = min(maxPayloadSize - 1, payloadLen);
+
     // 7.  AT+HTTPREAD -> +HTTPREAD:        - Read the HTTP Server Response
     if(res && payloadLen > 0) {
-        res = executeAtCmd("AT+HTTPREAD", "+HTTPREAD:", 5000) != nullptr;
+        tempPtr = (char *)realloc(tempPtr, 32);
+        sprintf(tempPtr, "AT+HTTPREAD=0,%u", payloadSize);
+        res = executeAtCmd(tempPtr, "+HTTPREAD:", 10000) != nullptr;
         if(!res) {
             LOG_E("Failed to obtain HTTP response.");
         }
