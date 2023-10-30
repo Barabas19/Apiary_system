@@ -406,6 +406,28 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     return res;
 }
 
+bool GsmController::sendHttpPostReq(const char *url, const char *data) {
+    const char *respPtr;
+    char *tempPtr = nullptr;
+    char *token;
+    int payloadLen = 0;
+    bool res;
+
+    // steps
+    // 1.  AT+HTTPINIT -> OK                - Initialize HTTP Service
+    // 2.  AT+HTTPPARA="CID",1 -> OK        - Set HTTP Parameters Value
+    // 3.  AT+HTTPPARA="URL","<url>" -> OK  - Set HTTP Parameters Value
+    // 4.  AT+HTTPPARA="CONTENT","application/x-www-form-urlencoded" -> OK  - Set HTTP Parameters Value
+    // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
+    // 6.  write POST data
+    // 7.  wait for OK
+    // 8.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
+    // 9.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
+    // 10. decode HTTPACTION status
+    // 11. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    // 12. finish
+}
+
 bool GsmController::verifyResponse(const char *message, const char *substr) {
     LOG_D("Verification '%s' vs '%s'", message, substr);
     bool res = strstr(message, substr) != nullptr;
