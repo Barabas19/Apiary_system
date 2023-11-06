@@ -31,10 +31,6 @@ SIM800::SIM800(HardwareSerial &uart, gpio_num_t txPin, gpio_num_t rxPin, gpio_nu
     
     uart.setRxBufferSize(RX_MAX_BUFFER_SIZE);
     uart.begin(115200, SERIAL_8N1, txPin, rxPin);
-
-    // allocate memory for read buffer
-    readBufferSize = RX_DEFAULT_BUFFER_SIZE + 1;
-    readBuffer = (char *)malloc(readBufferSize);
 }
 
 SIM800::~SIM800() {
@@ -86,17 +82,7 @@ const char* SIM800::readMessage() {
         return nullptr;
     }
 
-    readBuffer = (char *)memset(readBuffer, 0, readBufferSize);
-
-    while(true){
-        // extend buffer size, if necessary
-        if(received >= readBufferSize - 2) {
-            int newSize = min(readBufferSize + RX_DEFAULT_BUFFER_SIZE, RX_MAX_BUFFER_SIZE + 1);
-            readBuffer = (char *)realloc(readBuffer, newSize);
-            memset(&(readBuffer[readBufferSize]), 0, newSize - readBufferSize);
-            readBufferSize = newSize;
-        }
-
+    while(received < sizeof(readBuffer) - 1){
         // read character
         if(uart.readBytes(&c, 1) == 0) {
             break;
@@ -113,7 +99,12 @@ const char* SIM800::readMessage() {
         readBuffer[received++] = c;
     }
     
-    return received > 0 ? readBuffer : nullptr;
+    if(received > 0) {
+        readBuffer[received] = '\0';
+        return readBuffer;
+    }
+
+    return nullptr;
 }
 
 void SIM800::writeMessage(const char *message) {
