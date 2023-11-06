@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define RX_DEFAULT_BUFFER_SIZE  64
+
 #define RX_MAX_BUFFER_SIZE      1460
 
 class SIM800
@@ -52,8 +52,7 @@ private:
     gpio_num_t pwrKeyPin;
     gpio_num_t rstPin;
     gpio_num_t dtrPin;
-    char *readBuffer;
-    int readBufferSize;
+    char readBuffer[RX_MAX_BUFFER_SIZE];
 };
 
 #endif // SIM800_H_
