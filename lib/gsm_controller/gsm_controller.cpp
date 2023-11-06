@@ -303,7 +303,12 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
     // 11. finish
 
-    LOG_I("Requesting url '%s'...", url);
+    if(url == nullptr) {
+        LOG_E("URL is required.");
+        return false;
+    }
+
+    LOG_I("Processing HTTP GET request '%s'...", url);
 
     // 1.  AT+HTTPINIT -> OK                - Initialize HTTP Service
     if(!executeAtCmd("AT+HTTPINIT", "OK")) {
@@ -362,7 +367,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     int payloadSize = min(maxPayloadSize - 1, payloadLen);
 
     // 7.  AT+HTTPREAD -> +HTTPREAD:        - Read the HTTP Server Response
-    if(res && payloadLen > 0) {
+    if(res && payloadLen > 0 && payload != nullptr) {
         tempPtr = (char *)realloc(tempPtr, 32);
         sprintf(tempPtr, "AT+HTTPREAD=0,%u", payloadSize);
         res = executeAtCmd(tempPtr, "+HTTPREAD:", 10000) != nullptr;
@@ -372,7 +377,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     }
 
     // 8.  read http response
-    if(res && payloadLen > 0) {
+    if(res && payloadLen > 0 && payload != nullptr) {
         respPtr = waitForMessage(nullptr, 5000);
         res = respPtr != nullptr;
         if(!res) {
@@ -383,7 +388,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     }
 
     // 9.  wait for OK
-    if(res && payloadLen > 0) {
+    if(res && payloadLen > 0 && payload != nullptr) {
         if(!waitForMessage("OK")) {
             LOG_E("No OK after read of HTTP response.");
         }
@@ -399,7 +404,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
         free(tempPtr);
     }
 
-    if(res) {
+    if(res && payloadLen > 0 && payload != nullptr) {
         LOG_I("Payload received:\n%s", payload);
     }
 
@@ -418,6 +423,54 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     // 2.  AT+HTTPPARA="CID",1 -> OK        - Set HTTP Parameters Value
     // 3.  AT+HTTPPARA="URL","<url>" -> OK  - Set HTTP Parameters Value
     // 4.  AT+HTTPPARA="CONTENT","application/x-www-form-urlencoded" -> OK  - Set HTTP Parameters Value
+    // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
+    // 6.  write POST data
+    // 7.  wait for OK
+    // 8.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
+    // 9.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
+    // 10. decode HTTPACTION status
+    // 11. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    // 12. finish
+
+    if(url == nullptr) {
+        LOG_E("URL is required.");
+        return false;
+    }
+
+    if(data == nullptr) {
+        LOG_E("Data are required.");
+        return false;
+    }
+
+    LOG_I("Processing HTTP POST request '%s'...", url);
+
+    // 1.  AT+HTTPINIT -> OK                - Initialize HTTP Service
+    if(!executeAtCmd("AT+HTTPINIT", "OK")) {
+        LOG_E("Failed to initialize HTTP service.");
+        return false;
+    }
+
+    // 2.  AT+HTTPPARA="CID",1 -> OK        - Set HTTP Parameters Value
+    if(!executeAtCmd("AT+HTTPPARA=\"CID\",1", "OK")) {
+        LOG_E("Failed to set HTTP CID parameter.");
+        return false;
+    }
+
+    // 3.  AT+HTTPPARA="URL","<url>" -> OK  - Set HTTP Parameters Value
+    const char *cmdFmt = "AT+HTTPPARA=\"URL\",\"%s\"";
+    tempPtr = (char *)calloc(strlen(cmdFmt) + strlen(url) + 1, 1);
+    sprintf(tempPtr, cmdFmt, url);
+    res = executeAtCmd((const char *)tempPtr, "OK") != nullptr;
+    if(!res) {
+        LOG_E("Failed to set HTTP URL parameter.");
+    }
+
+    // 4.  AT+HTTPPARA="CONTENT","application/x-www-form-urlencoded" -> OK  - Set HTTP Parameters Value
+    if(!executeAtCmd("AT+HTTPPARA=\"CONTENT\",\"application/x-www-form-urlencoded\"", "OK")) {
+        LOG_E("Failed to set HTTP CONTENT parameter.");
+        return false;
+    }
+
     // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
     // 6.  write POST data
     // 7.  wait for OK
