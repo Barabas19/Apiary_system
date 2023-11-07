@@ -57,11 +57,12 @@ public:
 
     /** Send HTTP POST request
      * @url - full url to be sent
+     * @data - POST data
      * @payload - payload returned
      * @maxPayloadSize - the maximum payload size to be read
      * @returns - true, if successfully sent
     */
-    bool sendHttpPostReq(const char *url, const char *data);
+    bool sendHttpPostReq(const char *url, const char *data, char *payload, const uint16_t maxPayloadSize);
     
 private:
     SIM800 *modem;
