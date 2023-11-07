@@ -413,7 +413,7 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     return res;
 }
 
-bool GsmController::sendHttpPostReq(const char *url, const char *data) {
+bool GsmController::sendHttpPostReq(const char *url, const char *data, char *payload, const uint16_t maxPayloadSize) {
     const char *respPtr;
     char *tempPtr = nullptr;
     char *token;
@@ -430,8 +430,11 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     // 7.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
     // 8.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
     // 9.  decode HTTPACTION status
-    // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
-    // 11. finish
+    // 10. AT+HTTPREAD -> +HTTPREAD:        - Read the HTTP Server Response
+    // 11. read http response
+    // 12. wait for OK
+    // 13. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    // 14. finish
 
     if(url == nullptr) {
         LOG_E("URL is required.");
@@ -460,7 +463,7 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     // 3.  AT+HTTPPARA="URL","<url>" -> OK  - Set HTTP Parameters Value
     const char *cmdFmt = "AT+HTTPPARA=\"URL\",\"%s\"";
     tempPtr = (char *)calloc(strlen(cmdFmt) + strlen(url) + 1, 1);
-    sprintf(tempPtr, cmdFmt, url);
+    sprintf(tempPtr, "AT+HTTPPARA=\"URL\",\"%s\"", url);
     res = executeAtCmd((const char *)tempPtr, "OK") != nullptr;
     if(!res) {
         LOG_E("Failed to set HTTP URL parameter.");
@@ -473,8 +476,8 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     }
 
     // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
-    const char *cmdFmt = "AT+HTTPDATA=%d,%d";
-    tempPtr = (char *)calloc(32, 1);
+    cmdFmt = "AT+HTTPDATA=%d,%d";
+    tempPtr = (char *)calloc(strlen(cmdFmt) + 12, 1);
     sprintf(tempPtr, cmdFmt, strlen(data), 10000);
     if(!executeAtCmd(tempPtr, "DOWNLOAD")) {
         res = false;
@@ -513,23 +516,59 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
         strcpy(tempPtr, respPtr);
         token = strtok(tempPtr, ","); // +HTTPACTION: <Method>
         token = strtok(NULL, ","); // <StatusCode>
-        if(!token) {
+        if(atoi(token) != 200)
+        {
             res = false;
-            LOG_E("Failed to retrieve HTTP status code.");
-        } else if (atoi(token) != 200) {
-            res = false;
-            LOG_E("HTTP status code: %d.", atoi(token));
+            LOG_E("Failed with HTTP code %s.", token);
+        } else {
+            token = strtok(NULL, ","); // <DataLen>
+            payloadLen = atoi(token);
         }
     }
 
-    // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    int payloadSize = min(maxPayloadSize - 1, payloadLen);
+
+    // 10. AT+HTTPREAD -> +HTTPREAD:        - Read the HTTP Server Response
+    if(res && payloadLen > 0 && payload != nullptr) {
+        free(tempPtr);
+        tempPtr = (char *)calloc(32, 1);
+        sprintf(tempPtr, "AT+HTTPREAD=0,%u", payloadSize);
+        res = executeAtCmd(tempPtr, "+HTTPREAD:", 10000) != nullptr;
+        if(!res) {
+            LOG_E("Failed to obtain HTTP response.");
+        }
+    }
+
+    // 11. read http response
+    if(res && payloadLen > 0 && payload != nullptr) {
+        respPtr = waitForMessage(nullptr, 5000);
+        res = respPtr != nullptr;
+        if(!res) {
+            LOG_E("HTTP response cannot be read.");
+        } else {
+            strcpy(payload, respPtr);
+        }
+    }
+
+    // 12. wait for OK
+    if(res && payloadLen > 0 && payload != nullptr) {
+        if(!waitForMessage("OK")) {
+            LOG_E("No OK after read of HTTP response.");
+        }
+    }
+
+    // 13. AT+HTTPTERM -> OK                - Terminate HTTP Service
     if(!executeAtCmd("AT+HTTPTERM", "OK")) {
         LOG_E("Failed to terminate HTTP service.");
     }
 
-    // 11. finish
+    // 14. finish
     if(tempPtr) {
         free(tempPtr);
+    }
+
+    if(res && payloadLen > 0 && payload != nullptr) {
+        LOG_I("Payload received:\n%s", payload);
     }
 
     return res;
