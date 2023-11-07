@@ -350,7 +350,8 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
     
     // 6.  decode HTTPACTION status
     if(res) {
-        tempPtr = (char *)realloc(tempPtr, strlen(respPtr) + 1);
+        free(tempPtr);
+        tempPtr = (char *)calloc(strlen(respPtr) + 1, 1);
         strcpy(tempPtr, respPtr);
         token = strtok(tempPtr, ","); // +HTTPACTION: <Method>
         token = strtok(NULL, ","); // <StatusCode>
@@ -368,7 +369,8 @@ bool GsmController::sendHttpGetReq(const char *url, char *payload, const uint16_
 
     // 7.  AT+HTTPREAD -> +HTTPREAD:        - Read the HTTP Server Response
     if(res && payloadLen > 0 && payload != nullptr) {
-        tempPtr = (char *)realloc(tempPtr, 32);
+        free(tempPtr);
+        tempPtr = (char *)calloc(32, 1);
         sprintf(tempPtr, "AT+HTTPREAD=0,%u", payloadSize);
         res = executeAtCmd(tempPtr, "+HTTPREAD:", 10000) != nullptr;
         if(!res) {
@@ -424,13 +426,12 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     // 3.  AT+HTTPPARA="URL","<url>" -> OK  - Set HTTP Parameters Value
     // 4.  AT+HTTPPARA="CONTENT","application/x-www-form-urlencoded" -> OK  - Set HTTP Parameters Value
     // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
-    // 6.  write POST data
-    // 7.  wait for OK
-    // 8.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
-    // 9.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
-    // 10. decode HTTPACTION status
-    // 11. AT+HTTPTERM -> OK                - Terminate HTTP Service
-    // 12. finish
+    // 6.  write POST data, wait for OK
+    // 7.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
+    // 8.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
+    // 9.  decode HTTPACTION status
+    // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    // 11. finish
 
     if(url == nullptr) {
         LOG_E("URL is required.");
@@ -472,13 +473,66 @@ bool GsmController::sendHttpPostReq(const char *url, const char *data) {
     }
 
     // 5.  AT+HTTPDATA=<size>,<time> -> DOWNLOAD - Input HTTP Data
-    // 6.  write POST data
-    // 7.  wait for OK
-    // 8.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
-    // 9.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
-    // 10. decode HTTPACTION status
-    // 11. AT+HTTPTERM -> OK                - Terminate HTTP Service
-    // 12. finish
+    const char *cmdFmt = "AT+HTTPDATA=%d,%d";
+    tempPtr = (char *)calloc(32, 1);
+    sprintf(tempPtr, cmdFmt, strlen(data), 10000);
+    if(!executeAtCmd(tempPtr, "DOWNLOAD")) {
+        res = false;
+        LOG_E("Failed to send POST data.");
+    }
+
+    // 6.  write POST data, wait for OK
+    if(res) {
+        if(!executeAtCmd(data, "OK", 10000)) {
+            res = false;
+            LOG_E("No OK after sending POST data.");
+        }
+    }
+
+    // 7.  AT+HTTPACTION=1 -> OK            - HTTP Method Action
+    if(res) {
+        if(!executeAtCmd("AT+HTTPACTION=1", "OK", 10000)) {
+            res = false;
+            LOG_E("Failed to execute POST action.");
+        }
+    }
+
+    // 8.  wait for +HTTPACTION: <Method>,<StatusCode>,<DataLen>
+    if(res) {
+        respPtr = waitForMessage("+HTTPACTION:", 10000);
+        if(!respPtr) {
+            res = false;
+            LOG_E("No acknowledge for the sent data.");
+        }
+    }
+
+    // 9.  decode HTTPACTION status
+    if(res) {
+        free(tempPtr);
+        tempPtr = (char *)calloc(strlen(respPtr) + 1, 1);
+        strcpy(tempPtr, respPtr);
+        token = strtok(tempPtr, ","); // +HTTPACTION: <Method>
+        token = strtok(NULL, ","); // <StatusCode>
+        if(!token) {
+            res = false;
+            LOG_E("Failed to retrieve HTTP status code.");
+        } else if (atoi(token) != 200) {
+            res = false;
+            LOG_E("HTTP status code: %d.", atoi(token));
+        }
+    }
+
+    // 10. AT+HTTPTERM -> OK                - Terminate HTTP Service
+    if(!executeAtCmd("AT+HTTPTERM", "OK")) {
+        LOG_E("Failed to terminate HTTP service.");
+    }
+
+    // 11. finish
+    if(tempPtr) {
+        free(tempPtr);
+    }
+
+    return res;
 }
 
 bool GsmController::verifyResponse(const char *message, const char *substr) {
