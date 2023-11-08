@@ -1,8 +1,11 @@
 <?php
-foreach($_GET as $key => $value) {
-    echo 'GET ' . $key . '=' . $value . '<br>';
+if(count($_GET) > 0) {
+    $_GET['method'] = 'GET';
+    echo json_encode($_GET);
 }
-foreach($_POST as $key => $value) {
-    echo 'POST ' . $key . '=' . $value . '<br>';
+
+if(count($_POST) > 0) {
+    $_POST['method'] = 'POST';
+    echo json_encode($_POST);
 }
 ?>
