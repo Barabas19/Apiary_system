@@ -10,6 +10,7 @@ class Config {
 public:
     static bool getBurst(uint16_t *burst);
     static bool setBurst(uint16_t burst);
+    static bool updateConfig(const char *configJsonPtr);
     Config() = delete;
 
 private:
