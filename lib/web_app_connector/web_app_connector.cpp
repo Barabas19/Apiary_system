@@ -1,13 +1,12 @@
 #include "web_app_connector.h"
 #include "logger.h"
-#include "config.h"
 
 #include <time.h>
 #include <ArduinoJson.h>
 
-WebAppConnector::WebAppConnector(GsmController &gsm, Config &config) :
+WebAppConnector::WebAppConnector(GsmController &gsm, const char *webAppServer) :
 gsm{gsm},
-config{config},
+webAppServer{webAppServer},
 initialized{false} {}
 
 bool WebAppConnector::init()
@@ -44,7 +43,7 @@ bool WebAppConnector::init()
     return true;
 }
 
-bool WebAppConnector::uploadData(const char *dataJsonPtr)
+bool WebAppConnector::uploadData(const char *dataJsonPtr, const char *configJsonPtr)
 {
     if(!initialized) {
         LOG_E("Failed to upload data - web connector not initialized.");
@@ -63,13 +62,25 @@ bool WebAppConnector::uploadData(const char *dataJsonPtr)
     }
 
     char url[64];
-    char payload[64];
-    sprintf(url, "%s/%s",CONF_WEB_SERVER, POST_PHP_FILE);
+    sprintf(url, "%s/%s",webAppServer, POST_PHP_FILE);
     if(res) {
-        res = gsm.sendHttpPostReq(url, postData, payload, sizeof(payload));
+        res = gsm.sendHttpPostReq(url, postData, postPayload, sizeof(postPayload));
         if(!res) {
             LOG_E("Failed to upload data.");
         }
+    }
+
+    // return config
+    if(res && strlen(postPayload) > 0) {
+        DynamicJsonDocument doc(strlen(postPayload) * 2);
+        if(deserializeJson(doc, postPayload) != DeserializationError::Ok) {
+            configJsonPtr = postPayload;
+        } else {
+            LOG_W("Payload is not in json format.");
+            configJsonPtr = nullptr;
+        }
+    } else {
+        configJsonPtr = nullptr;
     }
 
     free(postData);

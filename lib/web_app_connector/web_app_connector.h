@@ -10,22 +10,28 @@
 
 class WebAppConnector {
 public:
-    WebAppConnector(GsmController &gsm, Config &config);
+    WebAppConnector(GsmController &gsm, const char *webAppServer);
 
     /** Initialize, update system time from GSM network
      * @returns - true, if successfully initialized
     */
     bool init();
 
-    bool uploadData(const char *dataJsonPtr);
-    bool updateConfig(const char *configJsonPtr);
+    /** Upload collected sensor values and update config (if any change received)
+     * @dataJsonPtr - pointer to sensor values in json format
+     * @configJsonPtr - pointer to the obtained config in json format
+     * @returns - true, if successfully initialized
+    */
+    bool uploadData(const char *dataJsonPtr, const char *configJsonPtr);
 
 private:
     GsmController &gsm;
-    Config &config;
     bool initialized;
+    char postPayload[128];
+    const char *webAppServer;
 
     bool transformJsonToPostData(const char *jsonPptr, char* postDataPtr);
+    
 };
 
 #endif // WEB_APP_CONNECTOR_H_
