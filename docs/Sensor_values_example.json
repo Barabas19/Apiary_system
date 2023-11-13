@@ -1,0 +1,18 @@
+{
+	"valuesets" : [
+		{
+			"timestamp" : "...",
+			"values" : [
+				{"name" : "...", "value" : 0.0},
+				{"name" : "...", "value" : 0.0}
+			]
+		},
+		{
+			"timestamp" : "...",
+			"values" : [
+				{"name" : "...", "value" : 0.0},
+				{"name" : "...", "value" : 0.0}
+			]
+		}
+	]
+}
