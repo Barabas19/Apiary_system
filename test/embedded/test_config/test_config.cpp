@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 #include "config_handler.h"
 
@@ -18,6 +19,15 @@ void test_set_burst() {
     Config::setBurst(DEFAULT_BURST);
     Config::getBurst(&loadedBurst);
     TEST_ASSERT_EQUAL(DEFAULT_BURST, loadedBurst);
+}
+
+void test_update_config() {
+    uint16_t burst = DEFAULT_BURST;
+    DynamicJsonDocument doc(64);
+    doc["burst"] = burst;
+    char configJson[64];
+    serializeJson(doc, configJson);
+    TEST_ASSERT(Config::updateConfig(configJson));
 }
 
 void test_settings() {

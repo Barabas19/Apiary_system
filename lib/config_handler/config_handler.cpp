@@ -26,6 +26,32 @@ bool Config::setBurst(uint16_t burst) {
     return true;
 }
 
+bool Config::updateConfig(const char *configJsonPtr)
+{
+    if(configJsonPtr == nullptr) {
+        return false;
+    }
+
+    bool res = true;
+
+    DynamicJsonDocument doc(strlen(configJsonPtr) * 2);
+    if(deserializeJson(doc, configJsonPtr) != DeserializationError::Ok) {
+        LOG_E("Failed to deserialize config json.");
+        return false;
+    }
+
+    if(doc.containsKey("burst")) {
+        if(setBurst(doc["burst"])) {
+            LOG_I("Burst updated to %ds.", doc["burst"]);
+        } else {
+            LOG_E("Failed to update burst.");
+            res = false;
+        }
+    }
+
+    return res;
+}
+
 bool Config::init() {
     initialized = true;
     if(!LittleFS.begin(true)) {

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#include "config.h"
+#include "project_config.h"
 #include "pin_map.h"
 #include "gsm_controller.h"
 
