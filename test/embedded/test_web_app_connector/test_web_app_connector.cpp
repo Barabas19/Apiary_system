@@ -15,7 +15,7 @@ void test_init() {
 }
 
 void test_upload_data() {
-    char data[] = "{\"sensor\"=100.0}";
+    const char *data = "{\"test\":100.0}";
     const char *configJsonPtr;
     TEST_ASSERT(webConnector.uploadData(data, configJsonPtr));
 

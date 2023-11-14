@@ -73,7 +73,7 @@ bool WebAppConnector::uploadData(const char *dataJsonPtr, const char *configJson
     // return config
     if(res && strlen(postPayload) > 0) {
         DynamicJsonDocument doc(strlen(postPayload) * 2);
-        if(deserializeJson(doc, postPayload) != DeserializationError::Ok) {
+        if(deserializeJson(doc, postPayload) == DeserializationError::Ok) {
             configJsonPtr = postPayload;
         } else {
             LOG_W("Payload is not in json format.");
