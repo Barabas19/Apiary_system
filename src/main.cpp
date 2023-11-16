@@ -1,30 +1,32 @@
 #include <Arduino.h>
 #include <logger.h>
+#include <ArduinoJson.h>
+#include <string>
 
-#include "sim800.h"
+#include "gsm_controller.h"
 #include "pin_map.h"
+#include "config_handler.h"
+#include "value_set.h"
 
 using namespace Esp32Logger;
 
-SIM800 gsm(Serial1, GSM_TX_PIN, GSM_RX_PIN, GSM_POWER_PIN, GSM_PWRKEY_PIN, GSM_RESET_PIN, GSM_DTR_PIN);
-char *buff;
+GsmController gsm(Serial1, GSM_TX_PIN, GSM_RX_PIN, GSM_POWER_PIN, GSM_PWRKEY_PIN, GSM_RESET_PIN, GSM_DTR_PIN);
+
 
 void setup() {
-    gsm.powerOn();
-    delay(3000);
+    delay(2000);
+    ValueSet vs;
+    time_t now;
+    time(&now);
+    vs.setTimestamp(now);
+    vs.addValue("test", 100.0);
+    auto poststr = vs.getPostString();
+    if(poststr) {
+        LOG_I("%s", poststr);
+    } else {
+        LOG_I("nullptr");
+    }
 }
 
 void loop() {
-    LOG_I("----------");
-    gsm.writeMessage("AT");
-    delay(1000);
-    
-    while(gsm.messageAvailable()) {
-        auto message = gsm.readMessage();
-        if(message) {
-            LOG_I("%s", message);
-        }
-    }
-    
-    delay(1000);
 }
