@@ -2,7 +2,7 @@
 #define VALUE_SET_H
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
+#include <string>
 #include <map>
 
 // structure of json is described in
@@ -11,17 +11,22 @@
 class ValueSet {
 public:
     ValueSet();
-    ~ValueSet();
 
-    /** Create new value set based on json object
-     * @json - json object
+    /** Create new value set based on string in format 'timestamp=123&name1=1.2&name2=2.3&...'
+     * @strPtr - name/values should be separated with '&' or ';'
     */
-    ValueSet(JsonObject &json);
+    static ValueSet fromString(const char *strPtr);
+    static ValueSet fromString(const std::string srcStr);
 
     /** Set time stamp of value set
-     * @tm - timestamp
+     * @tm - epoch time
     */
-    void setTimestamp(time_t tm);
+    void setTimestamp(const time_t tm);
+
+    /** Get time stamp of value set
+     * @returns - epoch time
+    */
+    time_t  getTimestamp();
 
     /** Add a pair of name and value to the value set
      * @name - value name
@@ -29,19 +34,19 @@ public:
     */
     void addValue(const char *name, float value);
 
-    /** Create a json object
-     * @returns - json object
+    /** Get value of the specified name
+     * @returns - value
     */
-    JsonObject getJsonObject();
+    float getValue(const char *name);
 
     /** Convert value set to string prepared for POST request
-     * @return - pointer to string for POST request
+     * @return - string for POST request
     */
-    const char * getPostString();
+    std::string toString();
 
 private:
-    JsonObject jsonObject;
-    char *postStrPtr;
+    time_t timestamp;
+    std::map<std::string, float> values;
 };
 
 #endif // VALUE_SET_H

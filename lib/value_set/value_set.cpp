@@ -1,57 +1,71 @@
+#include <list>
+#include <regex>
+#include <iomanip>
+
 #include "value_set.h"
+#include "logger.h"
+
+using namespace std;
 
 ValueSet::ValueSet() :
-postStrPtr{nullptr}
+timestamp{0}
 {}
 
-ValueSet::~ValueSet()
+ValueSet ValueSet::fromString(const char *strPtr)
 {
-    free(postStrPtr);
+    return fromString(string(strPtr));
 }
 
-ValueSet::ValueSet(JsonObject &json) :
-postStrPtr{nullptr}
+ValueSet ValueSet::fromString(const string str)
 {
-    if(json.containsKey("timestamp") && json.containsKey("values")) {
-        jsonObject = JsonObject(json);
+    ValueSet vs;
+    string srcStr = str;
+    regex rgx("[a-z0-9]+=[0-9\\.]+");
+    string match, name, value;
+    
+    for(smatch sm; regex_search(srcStr, sm, rgx); ) {
+        match = sm.str();
+        name = match.substr(0, match.find('='));
+        value = match.substr(match.find('=') + 1);
+        srcStr = sm.suffix();
+
+        if(name == "timestamp") {
+            vs.timestamp = static_cast<time_t>(stol(value));
+        } else {
+            vs.values[name] = stof(value);
+        }
     }
+
+    return vs;
 }
 
-void ValueSet::setTimestamp(time_t tm)
+void ValueSet::setTimestamp(const time_t tm)
 {
-    jsonObject["timestamp"] = tm;
+    timestamp = tm;
+}
+
+time_t ValueSet::getTimestamp()
+{
+    return timestamp;
 }
 
 void ValueSet::addValue(const char *name, float value)
 {
-    JsonObject newValue;
-    newValue[name] = value;
-    jsonObject["values"].add(newValue);
+    values[name] = value;
 }
 
-JsonObject ValueSet::getJsonObject()
+float ValueSet::getValue(const char *name)
 {
-    return jsonObject;
+    return values[name];
 }
 
-const char * ValueSet::getPostString()
+string ValueSet::toString()
 {
-    // verification
-    if(!jsonObject.containsKey("timestamp") || !jsonObject.containsKey("values")) {
-        return nullptr;
+    stringstream ss;
+    ss << "timestamp=" << timestamp;
+    for(const auto kv : values) {
+        ss << "&" << kv.first << "=" << fixed << setprecision(2) << kv.second;
     }
 
-    // release previously allocated memory
-    if(postStrPtr) {
-        free(postStrPtr);
-    }
-
-    // allocate enough memory for string
-    postStrPtr = (char *)calloc(sizeof(jsonObject), 1);
-    sprintf(postStrPtr, "timestamp=%d", jsonObject["timestamp"].as<long>());
-    for(JsonPair kv : jsonObject) {
-        sprintf(postStrPtr, "%s&%s=%.1f", postStrPtr, kv.key().c_str(), kv.value().as<float>());
-    }
-    
-    return postStrPtr;
+    return ss.str();
 }
