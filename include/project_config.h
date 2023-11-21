@@ -2,5 +2,6 @@
 #define CONFIG_H
 
 #define CONF_WEB_SERVER ""
+#define VALUES_COLLECTING_DURATION_S 60
 
 #endif // CONFIG_H
