@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "value_set.h"
+#include "sensor_data_struct.h"
 
 void test_timestamp() {
     const time_t tm = 10;
@@ -11,22 +12,35 @@ void test_timestamp() {
 }
 
 void test_value() {
-    const char *name = "test";
-    const float value = 10.0;
+    SensorData srcData;
+    srcData.name = "test";
+    srcData.value = 10.0;
+    srcData.battery = 99;
+    srcData.rssi = -150;
     ValueSet vs;
-    vs.addValue(name, value);
-    TEST_ASSERT_EQUAL(value, vs.getValue(name));
+    vs.addSensorData(srcData);
+
+    SensorData dstData;
+    dstData.name = srcData.name;
+    TEST_ASSERT(vs.getSensorData(dstData));
+    TEST_ASSERT_EQUAL(srcData.value, dstData.value);
+    TEST_ASSERT_EQUAL(srcData.battery, dstData.battery);
+    TEST_ASSERT_EQUAL(srcData.rssi, dstData.rssi);
 }
 
 void test_from_to_string() {
     const time_t tm = 10;
     const char *name = "test";
     const float value = 20.0;
-    char buffer[32];
-    sprintf(buffer, "timestamp=%d&%s=%.2f", tm, name, value);
-    ValueSet vs = ValueSet::fromString(buffer);
-    auto createdStr = vs.toString();
-    TEST_ASSERT(buffer == createdStr);
+    const uint8_t battery = 99;
+    const int rssi = -150;
+    char srcStr[64];
+    const char *jsonFormat = "{\"timestamp\":\"%d\",\"sensors\":[{\"name\":\"%s\",\"value\":%.2f,\"battery\":%u,\"rssi\":%d}]}";
+    sprintf(srcStr, jsonFormat, tm, name, value, battery, rssi);
+    ValueSet vs;
+    TEST_ASSERT(ValueSet::fromJsonString(srcStr, vs));
+    auto dstStr = vs.toJsonString();
+    TEST_ASSERT(srcStr == dstStr.c_str());
 }
 
 void test_value_set() {

@@ -3,7 +3,9 @@
 
 #include <Arduino.h>
 #include <string>
-#include <map>
+#include <list>
+
+#include "sensor_data_struct.h"
 
 // structure of json is described in
 // docs/Sensor_values_example.json
@@ -12,11 +14,13 @@ class ValueSet {
 public:
     ValueSet();
 
-    /** Create new value set based on string in format 'timestamp=123&name1=1.2&name2=2.3&...'
-     * @strPtr - name/values should be separated with '&' or ';'
+    /** Deserialize ValueSet from JSON string
+     * @strPtr - string in JSON format
+     * @vs - target ValueSet
+     * @returns - true, if successfully deserialized
     */
-    static ValueSet fromString(const char *strPtr);
-    static ValueSet fromString(const std::string srcStr);
+    static bool fromJsonString(const char *strPtr, ValueSet &vs);
+    static bool fromJsonString(const std::string srcStr, ValueSet &vs);
 
     /** Set time stamp of value set
      * @tm - epoch time
@@ -28,25 +32,25 @@ public:
     */
     time_t  getTimestamp();
 
-    /** Add a pair of name and value to the value set
-     * @name - value name
-     * @value - floating-point value
+    /** Add sensor data to value set
+     * @data - sensor data
     */
-    void addValue(const char *name, float value);
+    void addSensorData(SensorData data);
 
-    /** Get value of the specified name
-     * @returns - value
+    /** Get sensor data. data["name"] must be specified before call.
+     * @data - sensor data
+     * @returns - true, if found
     */
-    float getValue(const char *name);
+    bool getSensorData(SensorData &data);
 
-    /** Convert value set to string prepared for POST request
-     * @return - string for POST request
+    /** Convert value set to string in JSON format
+     * @return - JSON string
     */
-    std::string toString();
+    std::string toJsonString();
 
 private:
     time_t timestamp;
-    std::map<std::string, float> values;
+    std::list<SensorData> values;
 };
 
 #endif // VALUE_SET_H

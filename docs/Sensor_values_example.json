@@ -2,16 +2,19 @@
 	"valuesets" : [
 		{
 			"timestamp" : "...",
-			"values" : [
-				{"name" : "...", "value" : 0.0},
-				{"name" : "...", "value" : 0.0}
-			]
-		},
-		{
-			"timestamp" : "...",
-			"values" : [
-				{"name" : "...", "value" : 0.0},
-				{"name" : "...", "value" : 0.0}
+			"sensors" : [
+				{
+					"name" : "...",
+					"value" : 0.0,
+					"battery" : 0,
+					"rssi" : 0
+				},
+				{
+					"name" : "...",
+					"value" : 0.0,
+					"battery" : 0,
+					"rssi" : 0
+				}
 			]
 		}
 	]

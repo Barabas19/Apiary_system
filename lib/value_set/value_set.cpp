@@ -1,6 +1,7 @@
 #include <list>
 #include <regex>
 #include <iomanip>
+#include <ArduinoJson.h>
 
 #include "value_set.h"
 #include "logger.h"
@@ -11,32 +12,36 @@ ValueSet::ValueSet() :
 timestamp{0}
 {}
 
-ValueSet ValueSet::fromString(const char *strPtr)
+bool ValueSet::fromJsonString(const char *strPtr, ValueSet &vs)
 {
-    return fromString(string(strPtr));
+    return fromJsonString(string(strPtr), vs);
 }
 
-ValueSet ValueSet::fromString(const string str)
+bool ValueSet::fromJsonString(const string str, ValueSet &vs)
 {
-    ValueSet vs;
-    string srcStr = str;
-    regex rgx("[a-z0-9]+=[0-9\\.]+");
-    string match, name, value;
-    
-    for(smatch sm; regex_search(srcStr, sm, rgx); ) {
-        match = sm.str();
-        name = match.substr(0, match.find('='));
-        value = match.substr(match.find('=') + 1);
-        srcStr = sm.suffix();
+    bool res = true;
+    DynamicJsonDocument doc(str.length() * 2);
+    deserializeJson(doc, str);
+    if(!doc.containsKey("timestamp") || !doc.containsKey("sensors")) {
+        return false;
+    }
 
-        if(name == "timestamp") {
-            vs.timestamp = static_cast<time_t>(stol(value));
+    vs.setTimestamp(doc["timestamp"]);
+    vs.values.clear();
+    for(auto sensor : doc["sensors"].as<JsonArray>()) {
+        if(sensor.containsKey("name") && sensor.containsKey("value") && sensor.containsKey("battery") && sensor.containsKey("rssi")) {
+            SensorData data;
+            data.name = sensor["name"].as<string>();
+            data.value = sensor["value"];
+            data.battery = sensor["battery"];
+            data.rssi = sensor["rssi"];
+            vs.addSensorData(data);
         } else {
-            vs.values[name] = stof(value);
+            res = false;
         }
     }
 
-    return vs;
+    return res;
 }
 
 void ValueSet::setTimestamp(const time_t tm)
@@ -49,23 +54,43 @@ time_t ValueSet::getTimestamp()
     return timestamp;
 }
 
-void ValueSet::addValue(const char *name, float value)
+void ValueSet::addSensorData(SensorData data)
 {
-    values[name] = value;
+    values.push_back(data);
 }
 
-float ValueSet::getValue(const char *name)
+bool ValueSet::getSensorData(SensorData &data)
 {
-    return values[name];
+    for(auto entry : values) {
+        if(entry.name == data.name) {
+            data.value = entry.value;
+            data.battery = entry.battery;
+            data.rssi = entry.rssi;
+            return true;
+        }
+    }
+
+    return false;
 }
 
-string ValueSet::toString()
+string ValueSet::toJsonString()
 {
     stringstream ss;
-    ss << "timestamp=" << timestamp;
-    for(const auto kv : values) {
-        ss << "&" << kv.first << "=" << fixed << setprecision(2) << kv.second;
+    ss << "{\"timestamp\":" << timestamp << ",\"sensors\":[";
+    bool nr = 0;
+    for(const auto data : values) {
+        if(nr > 0) {
+            ss << ",";
+        };
+        
+        ss << "{\"name\":\"" << data.name << "\",";
+        ss << "\"value\":" << fixed << setprecision(2) << data.value << ",";
+        ss << "\"battery\":" << data.battery << ",";
+        ss << "\"rssi\":" << data.rssi << "}";
+        nr++;
     }
+
+    ss << "]}";
 
     return ss.str();
 }
