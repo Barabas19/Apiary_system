@@ -7,28 +7,24 @@
 #include <list>
 
 #include "value_set.h"
+#include "sensor_data_struct.h"
 
-struct SlaveData {
-    std::string name;
-    std::string bleAddr;
-    uint8_t batteryLevel;
-    float sensorValue;
-    int rssi;
-};
+#define DEFAULT_SLEEP_TIME_S 60
 
 class ValuesCollector {
 public:
-    static void run();
+    static void run(struct tm &nextWindowdt, bool &dtValid);
     static ValueSet getCollectedValues();
     static inline bool isFinished() { return finished; }
 private:
-    static void collectSlaveData(BLEAdvertisedDevice *device, BLEClient *bleClient);
+    static void collectDeviceData(BLEAdvertisedDevice *device, BLEClient *bleClient);
     static uint32_t calculateSleepTime();
-    static ValueSet values;
     static BLEAdvertisedDevice *foundDevice;
-    static std::map<BLEAddress, SlaveData> processedSlaves;
-    static std::list<BLEAddress> excludedSlaves;
+    static std::map<BLEAddress, SensorData> processedDevices; // the devices that have been already processed (+ their data)
+    static std::list<BLEAddress> excludedDevices; // the devices that don't have required services or characteristics
     static bool finished;
+    static struct tm &nextWindowOpenTime;
+    static bool &nextWindowOpenTimeValid;
 
     friend class AdvertisedCallbacks;
 };

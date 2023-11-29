@@ -9,7 +9,10 @@
 
 using namespace std;
 
-void ValuesCollector::run() {
+void ValuesCollector::run(struct tm &nextWindowdt, bool &dtValid) {
+    nextWindowOpenTime = nextWindowdt;
+    nextWindowOpenTimeValid = dtValid;
+
     finished = false;
     BLEDevice::init("ApiaryMaster");
     BLEScan *scan = BLEDevice::getScan();
@@ -22,10 +25,12 @@ void ValuesCollector::run() {
 
     auto startTime = millis();
     auto endTime = startTime + VALUES_COLLECTING_DURATION_S * 1000;
+    bool scanContinues = false;
     while(millis() < endTime) {
-        BLEDevice::getScan()->start((endTime - millis()) / 1000);
+        BLEDevice::getScan()->start((endTime - millis()) / 1000 + 1, scanContinues);
+        scanContinues = true;
         if(foundDevice) {
-            collectSlaveData(foundDevice, client);
+            collectDeviceData(foundDevice, client);
             foundDevice = nullptr;
         }
     }
@@ -37,17 +42,16 @@ ValueSet ValuesCollector::getCollectedValues()
 {
     time_t now;
     time(&now);
+    ValueSet values;
     values.setTimestamp(now);
-    for(auto kv : processedSlaves) {
-        values.addValue(kv.second.name.c_str(), kv.second.sensorValue);
+    for(auto kv : processedDevices) {
+        values.addSensorData(kv.second);
     }
-
-    // TODO: provide all the collected data (including battery level, BLE address, RSSI)
 
     return values;
 }
 
-void ValuesCollector::collectSlaveData(BLEAdvertisedDevice *device, BLEClient *bleClient)
+void ValuesCollector::collectDeviceData(BLEAdvertisedDevice *device, BLEClient *bleClient)
 {
     bleClient->connect(device);
     auto batterySrv = bleClient->getService(BLEUUID(BATTERY_SERVICE_UUID));
@@ -59,24 +63,42 @@ void ValuesCollector::collectSlaveData(BLEAdvertisedDevice *device, BLEClient *b
     auto sleepTimeChar = sleepTimeSrv->getCharacteristic(BLEUUID(SLEEP_TIME_CHARACTERISTIC_UUID));
     if(!batteryChar || ! sensorValueChar || ! sleepTimeChar) {
         LOG_W("BLE device '%s' cannot be processed - required characteristic not found.", device->getName().c_str());
-        excludedSlaves.push_back(device->getAddress());
+        excludedDevices.push_back(device->getAddress());
         return;
     }
 
-    SlaveData data;
+    SensorData data;
     data.name = device->getName();
-    data.bleAddr = device->getAddress().toString();
-    data.batteryLevel = batteryChar->readUInt8();
-    data.sensorValue = sensorValueChar->readFloat();
+    data.battery = batteryChar->readUInt8();
+    data.value = sensorValueChar->readFloat();
     data.rssi = device->getRSSI();
-    processedSlaves[device->getAddress()] = data;
+    processedDevices[device->getAddress()] = data;
     sleepTimeChar->writeValue(to_string(calculateSleepTime()));
     LOG_I("BLE device '%s' successfully processed.", device->getName().c_str());
 }
 
 uint32_t ValuesCollector::calculateSleepTime()
 {
-    return 0;
+    if(!nextWindowOpenTimeValid) {
+        LOG_W("Next collecting window time is not set, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
+        return DEFAULT_SLEEP_TIME_S;
+    }
+
+    time_t nextEpoch = mktime(&nextWindowOpenTime);
+    if(nextEpoch = -1) {
+        LOG_E("Next collecting window time is invalid, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
+        return DEFAULT_SLEEP_TIME_S;
+    }
+
+    time_t now;
+    time(&now);
+    if(now < 3600) {
+        LOG_E("System time is not actualized, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
+        return DEFAULT_SLEEP_TIME_S;
+    }
+
+    LOG_V("Calculated sleep time %ds.", nextEpoch - now);
+    return nextEpoch - now;
 }
 
 class AdvertisedCallbacks: public BLEAdvertisedDeviceCallbacks {
@@ -84,8 +106,8 @@ class AdvertisedCallbacks: public BLEAdvertisedDeviceCallbacks {
         LOG_I("Found BLE device '%s'.", advertisedDevice.toString().c_str());
         // Verify if the found device has not been processed yet
         // and it advertises required services
-        if(ValuesCollector::processedSlaves.count(advertisedDevice.getAddress()) == 0 &&
-        std::find(ValuesCollector::excludedSlaves.begin(), ValuesCollector::excludedSlaves.end(), advertisedDevice.getAddress()) == ValuesCollector::excludedSlaves.end() &&
+        if(ValuesCollector::processedDevices.count(advertisedDevice.getAddress()) == 0 &&
+        std::find(ValuesCollector::excludedDevices.begin(), ValuesCollector::excludedDevices.end(), advertisedDevice.getAddress()) == ValuesCollector::excludedDevices.end() &&
         advertisedDevice.haveServiceUUID() &&
         advertisedDevice.isAdvertisingService(BLEUUID(BATTERY_SERVICE_UUID)) &&
         advertisedDevice.isAdvertisingService(BLEUUID(SENSOR_VALUE_SERVICE_UUID)) &&
