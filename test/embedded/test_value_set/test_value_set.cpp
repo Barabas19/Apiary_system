@@ -34,13 +34,13 @@ void test_from_to_string() {
     const float value = 20.0;
     const uint8_t battery = 99;
     const int rssi = -150;
-    char srcStr[64];
-    const char *jsonFormat = "{\"timestamp\":\"%d\",\"sensors\":[{\"name\":\"%s\",\"value\":%.2f,\"battery\":%u,\"rssi\":%d}]}";
+    char srcStr[128];
+    const char *jsonFormat = "{\"timestamp\":%d,\"sensors\":[{\"name\":\"%s\",\"value\":%.2f,\"battery\":%u,\"rssi\":%d}]}";
     sprintf(srcStr, jsonFormat, tm, name, value, battery, rssi);
     ValueSet vs;
     TEST_ASSERT(ValueSet::fromJsonString(srcStr, vs));
     auto dstStr = vs.toJsonString();
-    TEST_ASSERT(srcStr == dstStr.c_str());
+    TEST_ASSERT_EQUAL_STRING(srcStr, dstStr.c_str());
 }
 
 void test_value_set() {
