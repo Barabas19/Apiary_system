@@ -9,9 +9,8 @@
 
 using namespace std;
 
-void ValuesCollector::run(struct tm &nextWindowdt, bool &dtValid) {
+void ValuesCollector::run(struct tm &nextWindowdt) {
     nextWindowOpenTime = nextWindowdt;
-    nextWindowOpenTimeValid = dtValid;
 
     finished = false;
     BLEDevice::init("ApiaryMaster");
@@ -51,6 +50,25 @@ ValueSet ValuesCollector::getCollectedValues()
     return values;
 }
 
+time_t ValuesCollector::calculateSleepTime(struct tm &nextWindowdt)
+{
+    time_t nextEpoch = mktime(&nextWindowdt);
+    if(nextEpoch = -1) {
+        LOG_E("Next collecting window time is invalid, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
+        return DEFAULT_SLEEP_TIME_S;
+    }
+
+    time_t now;
+    time(&now);
+    if(now < nextEpoch) {
+        LOG_E("Next collecting window time is in the past, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
+        return DEFAULT_SLEEP_TIME_S;
+    }
+
+    LOG_V("Calculated sleep time %ds.", nextEpoch - now);
+    return nextEpoch - now;
+}
+
 void ValuesCollector::collectDeviceData(BLEAdvertisedDevice *device, BLEClient *bleClient)
 {
     bleClient->connect(device);
@@ -73,32 +91,8 @@ void ValuesCollector::collectDeviceData(BLEAdvertisedDevice *device, BLEClient *
     data.value = sensorValueChar->readFloat();
     data.rssi = device->getRSSI();
     processedDevices[device->getAddress()] = data;
-    sleepTimeChar->writeValue(to_string(calculateSleepTime()));
+    sleepTimeChar->writeValue(to_string(calculateSleepTime(nextWindowOpenTime)));
     LOG_I("BLE device '%s' successfully processed.", device->getName().c_str());
-}
-
-uint32_t ValuesCollector::calculateSleepTime()
-{
-    if(!nextWindowOpenTimeValid) {
-        LOG_W("Next collecting window time is not set, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
-        return DEFAULT_SLEEP_TIME_S;
-    }
-
-    time_t nextEpoch = mktime(&nextWindowOpenTime);
-    if(nextEpoch = -1) {
-        LOG_E("Next collecting window time is invalid, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
-        return DEFAULT_SLEEP_TIME_S;
-    }
-
-    time_t now;
-    time(&now);
-    if(now < 3600) {
-        LOG_E("System time is not actualized, default sleep time will be used - %ds.", DEFAULT_SLEEP_TIME_S);
-        return DEFAULT_SLEEP_TIME_S;
-    }
-
-    LOG_V("Calculated sleep time %ds.", nextEpoch - now);
-    return nextEpoch - now;
 }
 
 class AdvertisedCallbacks: public BLEAdvertisedDeviceCallbacks {
